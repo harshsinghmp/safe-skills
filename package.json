@@ -1,0 +1,45 @@
+{
+  "name": "safe-skills",
+  "version": "1.0.0",
+  "description": "Security gate and vulnerability scanner wrapper for npx skills add, powered by NVIDIA SkillSpector.",
+  "main": "safe-skills.js",
+  "bin": {
+    "safe-skills": "./bin/safe-skills",
+    "skills": "./bin/skills"
+  },
+  "scripts": {
+    "test": "bash test/run.sh",
+    "lint": "node -c safe-skills.js"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "skills",
+    "security",
+    "skillspector",
+    "vulnerability-scanner",
+    "sandbox",
+    "claude-code",
+    "antigravity",
+    "opencode",
+    "hermes",
+    "safety-gate"
+  ],
+  "author": "Harsh",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/safe-skills.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin/",
+    "safe-skills.js",
+    "allowlist.toml",
+    "install.sh",
+    "LICENSE",
+    "README.md"
+  ]
+}

@@ -1,0 +1,9 @@
+[trusted_sources]
+repositories = [
+    "anthropics/skills",
+    "openai/skills",
+    "vercel-labs/skills",
+    "vercel-labs/agent-skills",
+    "cloudflare/skills",
+    "GoogleChrome/modern-web-guidance"
+]
