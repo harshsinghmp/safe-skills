@@ -33,7 +33,7 @@ Malicious or poorly vetted skills can silently:
 
 ```
                   ┌─────────────────────────────────────────┐
-                  │   User runs: skills add <repository>    │
+                  │ User runs: safe-skills add <repository> │
                   └────────────────────┬────────────────────┘
                                        │
                                        ▼
@@ -98,30 +98,30 @@ ln -s ~/.local/share/safe-skills/bin/skills ~/.local/bin/skills
 
 ## 💻 Usage
 
-`safe-skills` replaces raw `skills add` or `npx skills add` with zero workflow interruption:
+Run `safe-skills add <repository>` (or simply `skills add <repository>` via the included alias):
 
 ```bash
-# Basic usage (intercepts and scans automatically)
-skills add anthropics/anthropic-quickstarts
+# Basic usage (scans repository and prompts for consent)
+safe-skills add anthropics/anthropic-quickstarts
 
 # Add a specific skill from a multi-skill mono-repo
-skills add getsentry/skills --skill skill-scanner
+safe-skills add getsentry/skills --skill skill-scanner
 
-# Dry-run mode (scans and reports without prompting to install)
-skills add JuliusBrussee/cavekit --dry-run
+# Dry-run mode (scans and displays risk report without installing)
+safe-skills add JuliusBrussee/cavekit --dry-run
 
 # Run static-only analysis (bypasses LLM provider inference)
-skills add some-org/some-skill --no-llm
+safe-skills add some-org/some-skill --no-llm
 
 # Enforce a strict risk threshold (blocks anything above MEDIUM)
-skills add some-org/some-skill --threshold medium
+safe-skills add some-org/some-skill --threshold medium
 ```
 
 ---
 
 ## 📊 Sample Security Review Output
 
-When you run `skills add`, you are presented with a detailed, color-coded security review:
+When you run `safe-skills add`, you are presented with a detailed, color-coded security review:
 
 ```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
