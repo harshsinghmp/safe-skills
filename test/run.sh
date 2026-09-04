@@ -9,6 +9,7 @@ export SAFE_SKILLS_INSTALLER="node $(pwd)/test/fake-installer.js"
 export SAFE_INSTALL_LOG="$(pwd)/test/.install.log"
 export SAFE_SKILLS_CONFIG="$(pwd)/test/.config"
 export SAFE_SKILLS_DATA="$(pwd)/test/.data"
+export SAFE_SKILLS_LOCAL_LOCKFILE="$(pwd)/test/.data/local-skills-lock.json"
 rm -rf test/.config test/.data test/.install.log
 mkdir -p test/.config test/.data
 cat > test/.config/allowlist.toml <<'EOF'
@@ -176,7 +177,72 @@ grep -q "SYSTEM UPDATE" /tmp/ss21.log && echo "PASS: update subcommand executed"
 # 22. invalid subcommand exits with code 2
 node safe-skills.js invalid-cmd </dev/null >/tmp/ss22.log 2>&1
 check "invalid subcommand: exit 2" 2 $?
-grep -q "usage: safe-skills <add|update>" /tmp/ss22.log && echo "PASS: invalid subcommand shows usage" || { echo "FAIL: invalid subcommand usage"; FAIL=$((FAIL+1)); }
+grep -q "usage: safe-skills <add|update|verify>" /tmp/ss22.log && echo "PASS: invalid subcommand shows usage" || { echo "FAIL: invalid subcommand usage"; FAIL=$((FAIL+1)); }
+
+# 23. cryptographic ledger (skills-lock.json) written upon install
+[ -f test/.data/skills-lock.json ] && grep -q '"demo-skill"' test/.data/skills-lock.json && grep -q 'sha256:' test/.data/skills-lock.json
+check "skills-lock.json generated" 0 $?
+[ -f "$SAFE_SKILLS_LOCAL_LOCKFILE" ] && echo "PASS: local skills-lock.json generated" || { echo "FAIL: local skills-lock.json missing"; FAIL=$((FAIL+1)); }
+
+# 24. verify subcommand passes on intact skill
+node safe-skills.js verify demo-skill --path "$LOCAL" </dev/null >/tmp/ss24.log 2>&1
+check "verify intact skill: exit 0" 0 $?
+grep -q "VERIFIED" /tmp/ss24.log && grep -q "passed cryptographic verification" /tmp/ss24.log && echo "PASS: verify intact skill passed" || { echo "FAIL: verify intact skill"; FAIL=$((FAIL+1)); }
+
+# 25. verify subcommand detects tampering (exit 1)
+TAMPER_DIR="test/.tmp-tamper-skill"
+rm -rf "$TAMPER_DIR"
+mkdir -p "$TAMPER_DIR"
+echo "original content" > "$TAMPER_DIR/SKILL.md"
+SAFE_TEST_CASE=low node safe-skills.js add "$TAMPER_DIR" </dev/null >/dev/null 2>&1
+# Tamper with file
+echo "malicious modification" >> "$TAMPER_DIR/SKILL.md"
+node safe-skills.js verify .tmp-tamper-skill --path "$TAMPER_DIR" </dev/null >/tmp/ss25.log 2>&1
+check "verify detects tampering: exit 1" 1 $?
+grep -q "TAMPERED" /tmp/ss25.log && grep -q "tampering detected" /tmp/ss25.log && echo "PASS: tampering detected in report" || { echo "FAIL: tampering detection missing"; FAIL=$((FAIL+1)); }
+rm -rf "$TAMPER_DIR"
+
+# 26. Anti-TOCTOU: remote repo install target pinned to commit SHA
+GIT_SRC="test/.tmp-git-repo"
+rm -rf "$GIT_SRC"
+mkdir -p "$GIT_SRC"
+git -C "$GIT_SRC" init -q
+git -C "$GIT_SRC" config user.name "tester"
+git -C "$GIT_SRC" config user.email "tester@example.com"
+echo "content" > "$GIT_SRC/SKILL.md"
+git -C "$GIT_SRC" add .
+git -C "$GIT_SRC" commit -q -m "test commit"
+GIT_COMMIT=$(git -C "$GIT_SRC" rev-parse HEAD)
+
+rm -f test/.install.log
+SAFE_TEST_CASE=low node safe-skills.js add "file://$(pwd)/$GIT_SRC" </dev/null >/tmp/ss26.log 2>&1
+check "anti-TOCTOU commit pinning: exit 0" 0 $?
+grep -q "Anti-TOCTOU active — pinned downstream install to commit" /tmp/ss26.log && echo "PASS: anti-TOCTOU notice logged" || { echo "FAIL: anti-TOCTOU notice missing"; FAIL=$((FAIL+1)); }
+grep -q "file://$(pwd)/$GIT_SRC#$GIT_COMMIT" test/.install.log && echo "PASS: installer received pinned commit SHA" || { echo "FAIL: pinned commit missing from installer args"; FAIL=$((FAIL+1)); }
+rm -rf "$GIT_SRC"
+
+# 27. Anti-TOCTOU: local mode passes sandbox root to installer
+GIT_SRC="test/.tmp-git-repo2"
+rm -rf "$GIT_SRC"
+mkdir -p "$GIT_SRC"
+git -C "$GIT_SRC" init -q
+git -C "$GIT_SRC" config user.name "tester"
+git -C "$GIT_SRC" config user.email "tester@example.com"
+echo "content" > "$GIT_SRC/SKILL.md"
+git -C "$GIT_SRC" add .
+git -C "$GIT_SRC" commit -q -m "test commit"
+
+rm -f test/.install.log
+SAFE_TEST_CASE=low node safe-skills.js add "file://$(pwd)/$GIT_SRC" --anti-toctou local </dev/null >/tmp/ss27.log 2>&1
+check "anti-TOCTOU local mode: exit 0" 0 $?
+grep -q "installing from verified local sandbox" /tmp/ss27.log && echo "PASS: local anti-TOCTOU logged" || { echo "FAIL: local anti-TOCTOU log missing"; FAIL=$((FAIL+1)); }
+grep -q "safe-skills-src-" test/.install.log && echo "PASS: installer received local sandbox path" || { echo "FAIL: installer did not receive local sandbox path"; FAIL=$((FAIL+1)); }
+rm -rf "$GIT_SRC"
+
+# 28. Filesystem hardening (--readonly)
+SAFE_TEST_CASE=low node safe-skills.js add "$LOCAL" --readonly </dev/null >/tmp/ss28.log 2>&1
+check "readonly hardening: exit 0" 0 $?
+grep -q "Decision:  SAFE" /tmp/ss28.log && echo "PASS: readonly install completed" || { echo "FAIL: readonly install"; FAIL=$((FAIL+1)); }
 
 echo
 echo "=== $PASS passed, $FAIL failed ==="

@@ -29,25 +29,22 @@ To establish `safe-skills` as the universal zero-trust security gate, integrity 
 - [x] Persistent keys configuration (`~/.config/safe-skills/keys.env`).
 - [x] Supply-chain npm lockfile auditing (`package-lock.json`, `npm-shrinkwrap.json`).
 
-### ⚡ v1.2.0 — Cross-Platform Reliability & Single-Source Updates (Current)
+### ✅ v1.2.0 — Cross-Platform Reliability & Single-Source Updates
 - [x] **Cross-Platform TTY Harness**: Eliminated OS-dependent `script` utility failures in CI and macOS runners with native `SAFE_SKILLS_FORCE_TTY=1` simulation.
 - [x] **Single-Source Updater (`safe-skills update`)**: Self-updates both `safe-skills` (via git or npm) and the underlying NVIDIA SkillSpector scanner (via `uv` or `pip`).
 - [x] **NPM Registry Distribution**: Published `safe-skills` as a first-class global npm package (`npm install -g safe-skills`).
 - [x] **Repository Metadata Sanitization**: Clean package metadata, normalized repository URLs, and automated GitHub release notes.
 
+### 🛡️ v1.3.0 — Cryptographic Integrity & Anti-TOCTOU Defense (Current)
+- [x] **Anti-TOCTOU SHA Pinning (`<repo>#<sha>`)**: Eliminates Time-of-Check to Time-of-Use race conditions by automatically pinning remote installs to the exact verified commit SHA.
+- [x] **Local Sandbox Mode (`--anti-toctou local`)**: Installs directly from the verified ephemeral sandbox directory, guaranteeing zero additional network bytes fetched.
+- [x] **Cryptographic Integrity Ledger (`skills-lock.json`)**: Automatically calculates and records SHA-256 tree hashes for all approved skill files at install time.
+- [x] **Integrity Verifier Command (`safe-skills verify`)**: Audits installed skills against the ledger to detect tampering, missing files, or unauthorized post-install modifications.
+- [x] **Filesystem Hardening (`--readonly`)**: Enforces read-only permissions (`chmod 555`/`444`) on installed skill directories to block self-modifying payloads.
+
 ---
 
 ## 🚀 Future Milestones
-
-### 🛡️ v1.3.0 — Cryptographic Integrity & Anti-TOCTOU Defense
-* **Local-Path / SHA-Pinned Installation**:
-  - Eliminate Time-of-Check to Time-of-Use (TOCTOU) network re-fetch races by passing verified local sandbox directories or pinned commit hashes (`<repo>#<sha>`) to the downstream installer.
-* **Cryptographic Integrity Ledger (`skills-lock.json`)**:
-  - Record SHA-256 tree checksums of every approved skill file at installation time.
-* **Integrity Verifier & Quarantine (`safe-skills verify`)**:
-  - Periodically verify installed skill folders against `skills-lock.json` to detect unauthorized modifications or post-install tampering.
-* **Filesystem Write-Protection**:
-  - Enforce `chmod -R 555` on installed skill directories to block self-modifying payloads.
 
 ### 🔍 v1.4.0 — Multi-Engine Defense & Agent Injection Linter
 * **Automated Dual-Engine Cross-Validation**:
