@@ -34,10 +34,10 @@ const SCORE_POLICY = [
 ];
 
 // Finding categories that hard-block regardless of score (SOP §08).
-const HARD_BLOCK_RE = /credential\s*(theft|access)|exfiltrat|malware|yara|reverse\s*shell|remote\s*code|(^|\s)rce($|\s)|privilege\s*escalat|(malicious\s*)?persistence|self-?modif|taint|data\s*theft|hidden\s*prompt\s*inject/i;
+const HARD_BLOCK_RE = /credential\s*(theft|access)|exfiltrat|malware|yara|reverse\s*shell|remote\s*(code|transfer)|(^|\s)rce($|\s)|privilege\s*escalat|(malicious\s*)?persistence|self-?modif|taint|data\s*theft|hidden\s*prompt\s*inject|\bBH2\b/i;
 
 // Categories that trigger Sentry secondary review (SOP §10).
-const SENTRY_RE = /network|exfiltrat|credential|secret|env(ironment)?\s*var|mcp|persistence|cron|systemd|lifecycle|hook|privilege|config|supply\s*chain|dependency|install|execut|shell|taint/i;
+const SENTRY_RE = /network|exfiltrat|credential|secret|env(ironment)?\s*var|mcp|persistence|cron|systemd|lifecycle|hook|privilege|permission|config|supply\s*chain|dependency|install|execut|shell|taint|\bBH[13]\b/i;
 
 const LEVELS = { low: 1, medium: 2, high: 3, critical: 4 };
 
@@ -165,13 +165,15 @@ function classifyIssues(report) {
     const sev = String(i.severity || 'low').toLowerCase();
     (bySeverity[sev] || bySeverity.low).push(i);
     const specific = `${i.finding || ''} ${i.code_snippet || ''}`;
-    if (severityScore(sev) >= 3 || HARD_BLOCK_RE.test(specific)) hardBlock = true;
-    if (SENTRY_RE.test(`${i.category || ''} ${i.explanation || ''} ${specific}`)) sentry = true;
+    const id = String(i.id || '').toUpperCase();
+    if (id === 'BH2' || severityScore(sev) >= 3 || HARD_BLOCK_RE.test(specific) || HARD_BLOCK_RE.test(i.explanation || '') || HARD_BLOCK_RE.test(i.category || '')) hardBlock = true;
+    if (id === 'BH1' || id === 'BH3' || SENTRY_RE.test(`${i.category || ''} ${i.explanation || ''} ${specific}`)) sentry = true;
   }
   for (const c of report.components || []) {
     if (c.executable) sentry = true;
-    if (/^(scripts|hooks|\.github\/workflows|src)/.test(c.path)) sentry = true;
+    if (/^(scripts|hooks|\.github\/workflows|src|\.claude)/.test(c.path)) sentry = true;
     if (/\.(sh|py|js|ts|rb|pl)$/i.test(c.path)) sentry = true;
+    if (/(^|\/)(hooks\.json|settings(\.local)?\.json)$/i.test(c.path)) sentry = true;
   }
   return { bySeverity, hardBlock, sentry };
 }
