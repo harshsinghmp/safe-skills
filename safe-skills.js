@@ -15,7 +15,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 
 const CONFIG_DIR = process.env.SAFE_SKILLS_CONFIG || path.join(os.homedir(), '.config', 'safe-skills');
 const DATA_DIR = process.env.SAFE_SKILLS_DATA || path.join(os.homedir(), '.local', 'share', 'safe-skills');
@@ -59,7 +59,7 @@ function readJSON(file) {
   catch (e) { die(`cannot parse scanner output ${file}: ${e.message}`, 3); }
 }
 
-const rl = process.stdin.isTTY;
+const rl = !!(process.stdin.isTTY || process.env.SAFE_SKILLS_FORCE_TTY === '1');
 
 // Sync line read from fd 0. Works on TTY (canonical) and pipes. EOF → null.
 function readLineSync() {
@@ -265,14 +265,84 @@ function audit(entry) {
   }
 }
 
+function runUpdate() {
+  bar();
+  console.log(' 🔄 SAFE-SKILLS SYSTEM UPDATE');
+  bar();
+  console.log(`\nInstalled version: v${VERSION}`);
+
+  // 1. Update safe-skills
+  const scriptDir = path.resolve(__dirname);
+  const gitDir = fs.existsSync(path.join(scriptDir, '.git'))
+    ? scriptDir
+    : fs.existsSync(path.join(DATA_DIR, '.git'))
+      ? DATA_DIR
+      : null;
+
+  if (gitDir) {
+    console.log(`\nUpdating safe-skills via git repository (${gitDir})...`);
+    try {
+      const pull = sh('git', ['pull', '--ff-only'], { cwd: gitDir });
+      if (pull.status === 0) {
+        console.log(pull.stdout.trim() || 'safe-skills is already up to date.');
+      } else {
+        console.log(`git update notice: ${pull.stderr.trim() || 'already up to date or local branch'}`);
+      }
+    } catch (e) {
+      console.log(`git update failed: ${e.message}`);
+    }
+  } else {
+    console.log('\nChecking for safe-skills updates via npm...');
+    try {
+      const npmUp = sh('npm', ['install', '-g', 'safe-skills@latest'], { stdio: 'inherit' });
+      if (npmUp.status === 0) console.log('safe-skills updated to latest npm release.');
+    } catch (e) {
+      console.log(`npm update failed: ${e.message}`);
+    }
+  }
+
+  // 2. Update NVIDIA SkillSpector scanner
+  console.log('\nChecking NVIDIA SkillSpector scanner...');
+  let scannerUpdated = false;
+  try {
+    const uvCheck = sh('which', ['uv']);
+    if (uvCheck.status === 0) {
+      console.log('Running: uv tool upgrade skillspector...');
+      const uvUp = sh('uv', ['tool', 'upgrade', 'skillspector']);
+      if (uvUp.status === 0) {
+        console.log(uvUp.stdout.trim() || 'SkillSpector updated.');
+        scannerUpdated = true;
+      }
+    }
+  } catch {}
+
+  if (!scannerUpdated) {
+    try {
+      const pipCheck = sh('which', ['pip']);
+      if (pipCheck.status === 0) {
+        console.log('Running: pip install --upgrade skillspector...');
+        const pipUp = sh('pip', ['install', '--upgrade', 'skillspector']);
+        if (pipUp.status === 0) scannerUpdated = true;
+      }
+    } catch {}
+  }
+
+  console.log('\nUpdate process complete.');
+  bar();
+}
+
 // ── main ───────────────────────────────────────────────────────────────────
 
 function main() {
   loadKeys();
   const args = process.argv.slice(2);
   if (args.includes('--version') || args.includes('-V')) { console.log(VERSION); return; }
+  if (args[0] === 'update') {
+    runUpdate();
+    return;
+  }
   if (!args[0] || args[0] !== 'add') {
-    die('usage: safe-skills add <source> [--skill name ...] [options]\n       reserved: --threshold <low|medium|high|critical>  --force  --llm  --no-llm  --seed <int>  --temperature <float>', 2);
+    die('usage: safe-skills <add|update> [args]\n       safe-skills add <source> [--skill name ...] [options]\n       safe-skills update', 2);
   }
 
   const reserved = new Set(['--threshold', '--force', '--llm', '--no-llm', '--skill', '--dry-run', '--seed', '--temperature']);

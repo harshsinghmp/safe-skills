@@ -43,21 +43,21 @@ grep -q '"decision":"declined"' test/.data/audit.jsonl && echo "PASS: MEDIUM dec
 
 # 2b. MEDIUM approved via pty (y) → installs, exit 0, audit approved, not forced
 rm -f test/.install.log
-printf 'y\n' | script -qec "SAFE_TEST_CASE=medium node safe-skills.js add '$LOCAL'" /dev/null >/tmp/ss2b.log 2>&1
+printf 'y\n' | SAFE_SKILLS_FORCE_TTY=1 SAFE_TEST_CASE=medium node safe-skills.js add "$LOCAL" >/tmp/ss2b.log 2>&1
 check "MEDIUM approved" 0 $?
 grep -q 'Install "demo-skill" anyway?' /tmp/ss2b.log && grep -q '"decision":"approved"' test/.data/audit.jsonl && grep -q '"forced":false' test/.data/audit.jsonl && echo "PASS: MEDIUM approved + audited" || { echo "FAIL: MEDIUM approve flow"; FAIL=$((FAIL+1)); }
 [ -s test/.install.log ] && echo "PASS: MEDIUM approved installed" || { echo "FAIL: MEDIUM approved but no install"; FAIL=$((FAIL+1)); }
 
 # 2c. Mixed batch: alpha SAFE auto, beta MEDIUM approved (y) → both install, one command
 rm -f test/.install.log
-printf 'y\n' | script -qec "SAFE_TEST_CASES=alpha:low,beta:medium node safe-skills.js add 'test/fixtures/multi' --skill alpha --skill beta" /dev/null >/tmp/ss2c.log 2>&1
+printf 'y\n' | SAFE_SKILLS_FORCE_TTY=1 SAFE_TEST_CASES=alpha:low,beta:medium node safe-skills.js add 'test/fixtures/multi' --skill alpha --skill beta >/tmp/ss2c.log 2>&1
 check "mixed approve: exit 0" 0 $?
 grep -q '"alpha"' test/.install.log && grep -q '"beta"' test/.install.log && echo "PASS: installer got both skills" || { echo "FAIL: mixed install args"; FAIL=$((FAIL+1)); }
 grep -q 'Decision:  SAFE' /tmp/ss2c.log && grep -q 'Decision:  MEDIUM' /tmp/ss2c.log && grep -q 'Install "beta" anyway?' /tmp/ss2c.log && echo "PASS: per-skill review shown" || { echo "FAIL: mixed per-skill flow"; FAIL=$((FAIL+1)); }
 
 # 2d. Mixed batch: alpha SAFE auto, beta MEDIUM declined (n) → only alpha installs
 rm -f test/.install.log
-printf 'n\n' | script -qec "SAFE_TEST_CASES=alpha:low,beta:medium node safe-skills.js add 'test/fixtures/multi' --skill alpha --skill beta" /dev/null >/tmp/ss2d.log 2>&1
+printf 'n\n' | SAFE_SKILLS_FORCE_TTY=1 SAFE_TEST_CASES=alpha:low,beta:medium node safe-skills.js add 'test/fixtures/multi' --skill alpha --skill beta >/tmp/ss2d.log 2>&1
 check "mixed decline: exit 0" 0 $?
 grep -q '"alpha"' test/.install.log && ! grep -q '"beta"' test/.install.log && echo "PASS: only alpha installed" || { echo "FAIL: mixed decline install args"; FAIL=$((FAIL+1)); }
 grep '"skill":"beta"' test/.data/audit.jsonl | grep -q '"decision":"declined"' && echo "PASS: beta declined audited" || { echo "FAIL: mixed decline audit"; FAIL=$((FAIL+1)); }
@@ -73,7 +73,7 @@ check "CRITICAL+force: force-decline" 1 $?
 grep -q "bypassing the security policy" /tmp/ss4.log && echo "PASS: force warning shown" || { echo "FAIL: force warning"; FAIL=$((FAIL+1)); }
 
 # 5. CRITICAL + --force via pty, answer y → installs, exit 0, audit approved
-printf 'y\n' | script -qec "SAFE_TEST_CASE=critical node safe-skills.js add '$LOCAL' --force" /dev/null >/tmp/ss5.log 2>&1
+printf 'y\n' | SAFE_SKILLS_FORCE_TTY=1 SAFE_TEST_CASE=critical node safe-skills.js add "$LOCAL" --force >/tmp/ss5.log 2>&1
 check "CRITICAL+force: forced install" 0 $?
 grep -q '"decision":"approved"' test/.data/audit.jsonl && grep -q '"forced":true' test/.data/audit.jsonl && echo "PASS: audit approved+forced" || { echo "FAIL: audit entry"; FAIL=$((FAIL+1)); }
 
@@ -116,12 +116,12 @@ unset SAFE_TEST_EXIT
 
 # 12. BLOCKED, interactive override WITHOUT --force: y → installs
 rm -f test/.install.log
-printf 'y\n' | script -qec "SAFE_TEST_CASE=high node safe-skills.js add '$LOCAL'" /dev/null >/tmp/ss12.log 2>&1
+printf 'y\n' | SAFE_SKILLS_FORCE_TTY=1 SAFE_TEST_CASE=high node safe-skills.js add "$LOCAL" >/tmp/ss12.log 2>&1
 check "blocked interactive override" 0 $?
 grep -q 'Install "demo-skill" anyway despite the security findings?' /tmp/ss12.log && grep -q '"decision":"approved"' test/.data/audit.jsonl && grep -q '"forced":true' test/.data/audit.jsonl && [ -s test/.install.log ] && echo "PASS: override installed + audited forced" || { echo "FAIL: override flow"; FAIL=$((FAIL+1)); }
 
 # 13. BLOCKED, interactive decline: n → exit 1, audit blocked
-printf 'n\n' | script -qec "SAFE_TEST_CASE=high node safe-skills.js add '$LOCAL'" /dev/null >/tmp/ss13.log 2>&1
+printf 'n\n' | SAFE_SKILLS_FORCE_TTY=1 SAFE_TEST_CASE=high node safe-skills.js add "$LOCAL" >/tmp/ss13.log 2>&1
 check "blocked interactive decline" 1 $?
 grep -q '"decision":"blocked"' test/.data/audit.jsonl && echo "PASS: override declined audited" || { echo "FAIL: decline audit"; FAIL=$((FAIL+1)); }
 
@@ -167,6 +167,16 @@ SAFE_TEST_CASE=low node safe-skills.js add "$LOCKFILE_SKILL" </dev/null >/tmp/ss
 check "lockfile scan: exit 0" 0 $?
 grep -q "Lockfile:   audited (package-lock.json)" /tmp/ss20.log && echo "PASS: lockfile audited reported in summary" || { echo "FAIL: lockfile detection missing in summary"; FAIL=$((FAIL+1)); }
 rm -rf "$LOCKFILE_SKILL"
+
+# 21. update subcommand executes cleanly
+node safe-skills.js update </dev/null >/tmp/ss21.log 2>&1
+check "update subcommand: exit 0" 0 $?
+grep -q "SYSTEM UPDATE" /tmp/ss21.log && echo "PASS: update subcommand executed" || { echo "FAIL: update banner"; FAIL=$((FAIL+1)); }
+
+# 22. invalid subcommand exits with code 2
+node safe-skills.js invalid-cmd </dev/null >/tmp/ss22.log 2>&1
+check "invalid subcommand: exit 2" 2 $?
+grep -q "usage: safe-skills <add|update>" /tmp/ss22.log && echo "PASS: invalid subcommand shows usage" || { echo "FAIL: invalid subcommand usage"; FAIL=$((FAIL+1)); }
 
 echo
 echo "=== $PASS passed, $FAIL failed ==="
