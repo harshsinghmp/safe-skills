@@ -115,6 +115,9 @@ safe-skills add some-org/some-skill --no-llm
 
 # Enforce a strict risk threshold (blocks anything above MEDIUM)
 safe-skills add some-org/some-skill --threshold medium
+
+# Deterministic LLM sampling (NVIDIA SkillSpector v2.11+)
+safe-skills add some-org/some-skill --seed 42 --temperature 0.0
 ```
 
 ---
@@ -132,6 +135,7 @@ Repository: https://github.com/example/untrusted-skill
 Skill:      crypto-helper
 Scope:      LOCAL
 Source:     UNKNOWN  (static-only scan)
+Lockfile:   audited (package-lock.json)
 
 SkillSpector:
   Score: 35/100
@@ -161,14 +165,14 @@ Install crypto-helper? [y/N]:
 
 ### 1. Risk Score Tiers
 * **LOW (0–20)**: Clean static analysis, trusted patterns $\rightarrow$ Prompted for standard install.
-* **MEDIUM (21–50)**: Contains network calls, script hooks, or environment variable reads $\rightarrow$ Flagged with yellow warning.
+* **MEDIUM (21–50)**: Contains network calls, script hooks, bundled lifecycle hooks (`BH1`), or permission modifications (`BH3`) $\rightarrow$ Flagged with warning for secondary review.
 * **HIGH (51–80)**: Suspicious obfuscation, dynamic execution $\rightarrow$ Blocked by default.
 * **CRITICAL (81–100)**: Known exploits, privilege escalation $\rightarrow$ Hard blocked.
 
 ### 2. Zero-Tolerance Hard Blocks (Non-Overridable)
 `safe-skills` automatically halts execution regardless of score if any of the following patterns are detected:
 * ⛔ **Credential / Secret Theft** (`~/.ssh`, `~/.aws/credentials`, `~/.env`, browser cookies)
-* ⛔ **Data Exfiltration** (unauthorized outbound socket connections transmitting local file contents)
+* ⛔ **Data Exfiltration & Remote Transfer** (`BH2`, unauthorized outbound socket connections transmitting local file contents)
 * ⛔ **Reverse Shells / Remote Code Execution (RCE)** (`nc -e`, `bash -i`, dynamic `eval` payloads)
 * ⛔ **Malicious Persistence** (tampering with `/etc/systemd`, crontabs, or `.zshrc`/`.bashrc` hooks)
 
@@ -188,7 +192,18 @@ trusted_repositories = [
 ]
 ```
 
-### 2. Audit Trail (`~/.local/share/safe-skills/audit.jsonl`)
+### 2. API Keys & Sampling Configuration (`~/.config/safe-skills/keys.env`)
+You can configure LLM provider keys and default deterministic sampling controls:
+
+```bash
+# ~/.config/safe-skills/keys.env
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+SKILLSPECTOR_SEED=42
+SKILLSPECTOR_TEMPERATURE=0.0
+```
+
+### 3. Audit Trail (`~/.local/share/safe-skills/audit.jsonl`)
 Every single scan and installation decision (approved, declined, or blocked) is appended to a structured JSON Lines audit file:
 
 ```json

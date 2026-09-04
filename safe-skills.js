@@ -34,10 +34,10 @@ const SCORE_POLICY = [
 ];
 
 // Finding categories that hard-block regardless of score (SOP §08).
-const HARD_BLOCK_RE = /credential\s*(theft|access)|exfiltrat|malware|yara|reverse\s*shell|remote\s*code|(^|\s)rce($|\s)|privilege\s*escalat|(malicious\s*)?persistence|self-?modif|taint|data\s*theft|hidden\s*prompt\s*inject/i;
+const HARD_BLOCK_RE = /credential\s*(theft|access)|exfiltrat|malware|yara|reverse\s*shell|remote\s*(code|transfer)|(^|\s)rce($|\s)|privilege\s*escalat|(malicious\s*)?persistence|self-?modif|taint|data\s*theft|hidden\s*prompt\s*inject|\bBH2\b/i;
 
 // Categories that trigger Sentry secondary review (SOP §10).
-const SENTRY_RE = /network|exfiltrat|credential|secret|env(ironment)?\s*var|mcp|persistence|cron|systemd|lifecycle|hook|privilege|config|supply\s*chain|dependency|install|execut|shell|taint/i;
+const SENTRY_RE = /network|exfiltrat|credential|secret|env(ironment)?\s*var|mcp|persistence|cron|systemd|lifecycle|hook|privilege|permission|config|supply\s*chain|dependency|install|execut|shell|taint|\bBH[13]\b/i;
 
 const LEVELS = { low: 1, medium: 2, high: 3, critical: 4 };
 
@@ -136,6 +136,14 @@ function findSkillDirs(root, skillNames) {
   return out;
 }
 
+function detectLockfile(dir, root) {
+  for (const d of [dir, root].filter(Boolean)) {
+    if (fs.existsSync(path.join(d, 'package-lock.json'))) return 'audited (package-lock.json)';
+    if (fs.existsSync(path.join(d, 'npm-shrinkwrap.json'))) return 'audited (npm-shrinkwrap.json)';
+  }
+  return 'none';
+}
+
 // ── scanning ───────────────────────────────────────────────────────────────
 
 function scanTarget(dir, useLLM) {
@@ -165,13 +173,15 @@ function classifyIssues(report) {
     const sev = String(i.severity || 'low').toLowerCase();
     (bySeverity[sev] || bySeverity.low).push(i);
     const specific = `${i.finding || ''} ${i.code_snippet || ''}`;
-    if (severityScore(sev) >= 3 || HARD_BLOCK_RE.test(specific)) hardBlock = true;
-    if (SENTRY_RE.test(`${i.category || ''} ${i.explanation || ''} ${specific}`)) sentry = true;
+    const id = String(i.id || '').toUpperCase();
+    if (id === 'BH2' || severityScore(sev) >= 3 || HARD_BLOCK_RE.test(specific) || HARD_BLOCK_RE.test(i.explanation || '') || HARD_BLOCK_RE.test(i.category || '')) hardBlock = true;
+    if (id === 'BH1' || id === 'BH3' || SENTRY_RE.test(`${i.category || ''} ${i.explanation || ''} ${specific}`)) sentry = true;
   }
   for (const c of report.components || []) {
     if (c.executable) sentry = true;
-    if (/^(scripts|hooks|\.github\/workflows|src)/.test(c.path)) sentry = true;
+    if (/^(scripts|hooks|\.github\/workflows|src|\.claude)/.test(c.path)) sentry = true;
     if (/\.(sh|py|js|ts|rb|pl)$/i.test(c.path)) sentry = true;
+    if (/(^|\/)(hooks\.json|settings(\.local)?\.json)$/i.test(c.path)) sentry = true;
   }
   return { bySeverity, hardBlock, sentry };
 }
@@ -207,6 +217,7 @@ function summary(meta, report, issues, level, trusted, staticOnly) {
   console.log(`Scope:      ${meta.scope}`);
   if (meta.commit) console.log(`Commit:     ${meta.commit.slice(0, 12)}`);
   console.log(`Source:     ${trusted ? 'TRUSTED' : 'UNKNOWN'}${staticOnly ? '  (static-only scan)' : ''}`);
+  if (meta.lockfile) console.log(`Lockfile:   ${meta.lockfile}`);
   const ra = report.risk_assessment || {};
   console.log(`\nSkillSpector:`);
   console.log(`  Score: ${ra.score}/100`);
@@ -261,10 +272,10 @@ function main() {
   const args = process.argv.slice(2);
   if (args.includes('--version') || args.includes('-V')) { console.log(VERSION); return; }
   if (!args[0] || args[0] !== 'add') {
-    die('usage: safe-skills add <source> [--skill name ...] [options]\n       reserved: --threshold <low|medium|high|critical>  --force  --llm  --no-llm', 2);
+    die('usage: safe-skills add <source> [--skill name ...] [options]\n       reserved: --threshold <low|medium|high|critical>  --force  --llm  --no-llm  --seed <int>  --temperature <float>', 2);
   }
 
-  const reserved = new Set(['--threshold', '--force', '--llm', '--no-llm', '--skill', '--dry-run']);
+  const reserved = new Set(['--threshold', '--force', '--llm', '--no-llm', '--skill', '--dry-run', '--seed', '--temperature']);
   let source = null;
   let threshold = 'high';
   let force = false;
@@ -281,6 +292,19 @@ function main() {
     if (a === '--dry-run') { dryRun = true; continue; }
     if (a === '--llm') { forceLLM = true; continue; }
     if (a === '--no-llm') { forceLLM = false; continue; }
+    if (a === '--seed') {
+      const s = args[++i];
+      if (!s || !/^-?\d+$/.test(s)) die(`bad --seed ${s || ''}`, 2);
+      process.env.SKILLSPECTOR_SEED = s;
+      continue;
+    }
+    if (a === '--temperature') {
+      const t = args[++i];
+      const val = parseFloat(t);
+      if (!t || isNaN(val) || val < 0.0 || val > 2.0) die(`bad --temperature ${t || ''}`, 2);
+      process.env.SKILLSPECTOR_TEMPERATURE = t;
+      continue;
+    }
     if (a === '--skill') {
       const n = args[++i];
       if (!n) die('--skill requires a name', 2);
@@ -327,6 +351,7 @@ function main() {
       skill: t.label,
       scope,
       commit,
+      lockfile: detectLockfile(t.dir, root),
     }));
     issues = reports.map(classifyIssues);
   } catch (e) {

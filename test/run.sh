@@ -125,6 +125,49 @@ printf 'n\n' | script -qec "SAFE_TEST_CASE=high node safe-skills.js add '$LOCAL'
 check "blocked interactive decline" 1 $?
 grep -q '"decision":"blocked"' test/.data/audit.jsonl && echo "PASS: override declined audited" || { echo "FAIL: decline audit"; FAIL=$((FAIL+1)); }
 
+# 14. BH2 finding (direct proven remote exfil) → BLOCKED despite low score
+SAFE_TEST_CASE=bh2 node safe-skills.js add "$LOCAL" </dev/null >/tmp/ss14.log 2>&1
+check "BH2 hard-block" 1 $?
+grep -q "INSTALLATION BLOCKED" /tmp/ss14.log && grep -q "Decision:  BLOCKED" /tmp/ss14.log && echo "PASS: BH2 hard-blocked" || { echo "FAIL: BH2 block flow"; FAIL=$((FAIL+1)); }
+
+# 15. BH1 finding (bundled lifecycle hook) → MEDIUM risk + sentry review
+SAFE_TEST_CASE=bh1 node safe-skills.js add "$LOCAL" </dev/null >/tmp/ss15.log 2>&1
+check "BH1 sentry medium" 1 $?
+grep -q "Decision:  MEDIUM" /tmp/ss15.log && grep -q "secondary review" /tmp/ss15.log && echo "PASS: BH1 routes to medium" || { echo "FAIL: BH1 flow"; FAIL=$((FAIL+1)); }
+
+# 16. BH3 finding (broad permission mode) → MEDIUM risk + sentry review
+SAFE_TEST_CASE=bh3 node safe-skills.js add "$LOCAL" </dev/null >/tmp/ss16.log 2>&1
+check "BH3 sentry medium" 1 $?
+grep -q "Decision:  MEDIUM" /tmp/ss16.log && grep -q "secondary review" /tmp/ss16.log && echo "PASS: BH3 routes to medium" || { echo "FAIL: BH3 flow"; FAIL=$((FAIL+1)); }
+
+# 17. bad --seed (non-integer) → exit 2
+node safe-skills.js add "$LOCAL" --seed notanumber </dev/null >/tmp/ss17.log 2>&1
+check "bad --seed: exit 2" 2 $?
+grep -q "bad --seed" /tmp/ss17.log && echo "PASS: bad --seed error message" || { echo "FAIL: bad --seed msg"; FAIL=$((FAIL+1)); }
+
+# 18. bad --temperature (out of range or invalid) → exit 2
+node safe-skills.js add "$LOCAL" --temperature 3.5 </dev/null >/tmp/ss18.log 2>&1
+check "bad --temperature: exit 2" 2 $?
+grep -q "bad --temperature" /tmp/ss18.log && echo "PASS: bad --temperature error message" || { echo "FAIL: bad --temperature msg"; FAIL=$((FAIL+1)); }
+
+# 19. valid --seed and --temperature forward to scanner env & are stripped from installer
+rm -f test/.install.log /tmp/scanner_env.log
+SAFE_SCAN_ENV_LOG="/tmp/scanner_env.log" SAFE_TEST_CASE=low node safe-skills.js add "$LOCAL" --seed 42 --temperature 0.5 </dev/null >/tmp/ss19.log 2>&1
+check "valid sampling controls: exit 0" 0 $?
+grep -q '"seed":"42"' /tmp/scanner_env.log && grep -q '"temperature":"0.5"' /tmp/scanner_env.log && echo "PASS: scanner received seed and temperature" || { echo "FAIL: scanner env forwarding"; FAIL=$((FAIL+1)); }
+! grep -q -- "--seed" test/.install.log && ! grep -q -- "--temperature" test/.install.log && echo "PASS: installer stripped sampling flags" || { echo "FAIL: installer got reserved sampling flags"; FAIL=$((FAIL+1)); }
+
+# 20. lockfile detection in summary
+LOCKFILE_SKILL="test/.lockfile-skill"
+rm -rf "$LOCKFILE_SKILL"
+mkdir -p "$LOCKFILE_SKILL"
+echo "# Mock Skill" > "$LOCKFILE_SKILL/SKILL.md"
+echo '{"name":"mock","lockfileVersion":3}' > "$LOCKFILE_SKILL/package-lock.json"
+SAFE_TEST_CASE=low node safe-skills.js add "$LOCKFILE_SKILL" </dev/null >/tmp/ss20.log 2>&1
+check "lockfile scan: exit 0" 0 $?
+grep -q "Lockfile:   audited (package-lock.json)" /tmp/ss20.log && echo "PASS: lockfile audited reported in summary" || { echo "FAIL: lockfile detection missing in summary"; FAIL=$((FAIL+1)); }
+rm -rf "$LOCKFILE_SKILL"
+
 echo
 echo "=== $PASS passed, $FAIL failed ==="
 [ $FAIL -eq 0 ]

