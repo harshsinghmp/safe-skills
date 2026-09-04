@@ -77,7 +77,7 @@ Malicious or poorly vetted skills can silently:
 ### 1-Line Installation (Linux & macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-username/safe-skills/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/harshsinghmp/safe-skills/main/install.sh | bash
 ```
 
 ### Or via NPM (Global)
@@ -89,7 +89,7 @@ npm install -g safe-skills
 ### Or Manual Clone
 
 ```bash
-git clone https://github.com/your-username/safe-skills.git ~/.local/share/safe-skills
+git clone https://github.com/harshsinghmp/safe-skills.git ~/.local/share/safe-skills
 ln -s ~/.local/share/safe-skills/bin/safe-skills ~/.local/bin/safe-skills
 ln -s ~/.local/share/safe-skills/bin/skills ~/.local/bin/skills
 ```
