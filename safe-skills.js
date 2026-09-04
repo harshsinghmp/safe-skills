@@ -11,16 +11,18 @@
 'use strict';
 
 const { execFileSync, spawnSync } = require('node:child_process');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const VERSION = '1.2.1';
+const VERSION = '1.3.0';
 
 const CONFIG_DIR = process.env.SAFE_SKILLS_CONFIG || path.join(os.homedir(), '.config', 'safe-skills');
 const DATA_DIR = process.env.SAFE_SKILLS_DATA || path.join(os.homedir(), '.local', 'share', 'safe-skills');
 const ALLOWLIST_FILE = path.join(CONFIG_DIR, 'allowlist.toml');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.jsonl');
+const LOCK_FILE = process.env.SAFE_SKILLS_LOCKFILE || path.join(DATA_DIR, 'skills-lock.json');
 
 const SCANNER = process.env.SAFE_SKILLS_SCANNER || 'skillspector';
 const INSTALLER = process.env.SAFE_SKILLS_INSTALLER || 'npx';
@@ -265,6 +267,243 @@ function audit(entry) {
   }
 }
 
+// ── cryptographic integrity ledger (SOP §20 / v1.3.0) ──────────────────────
+
+function hashFile(filePath) {
+  const data = fs.readFileSync(filePath);
+  return 'sha256:' + crypto.createHash('sha256').update(data).digest('hex');
+}
+
+function computeSkillTreeHashes(dir) {
+  const hashes = {};
+  function walk(current, base) {
+    if (!fs.existsSync(current)) return;
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.name === '.git' || e.name === 'node_modules') continue;
+      const fullPath = path.join(current, e.name);
+      const relPath = path.relative(base, fullPath);
+      if (e.isDirectory()) {
+        walk(fullPath, base);
+      } else if (e.isFile()) {
+        hashes[relPath] = hashFile(fullPath);
+      }
+    }
+  }
+  walk(dir, dir);
+  return hashes;
+}
+
+function readLockfile(filePath = LOCK_FILE) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return { version: '1.0', updated_at: null, skills: {} };
+  }
+}
+
+function writeLockfile(lockData, filePath = LOCK_FILE) {
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    lockData.updated_at = new Date().toISOString();
+    fs.writeFileSync(filePath, JSON.stringify(lockData, null, 2) + '\n', 'utf8');
+  } catch (e) {
+    process.stderr.write(`safe-skills: lockfile write failed: ${e.message}\n`);
+  }
+}
+
+function updateLockLedger(skillName, record, isGlobal) {
+  const central = readLockfile(LOCK_FILE);
+  if (!central.skills) central.skills = {};
+  central.skills[skillName] = record;
+  writeLockfile(central, LOCK_FILE);
+
+  if (!isGlobal) {
+    const localPath = process.env.SAFE_SKILLS_LOCAL_LOCKFILE || path.join(process.cwd(), 'skills-lock.json');
+    const localLock = readLockfile(localPath);
+    if (!localLock.skills) localLock.skills = {};
+    localLock.skills[skillName] = record;
+    writeLockfile(localLock, localPath);
+  }
+}
+
+function findInstalledSkillDir(skillName, scope = 'local', customBase = null) {
+  const candidates = [];
+  if (customBase) {
+    candidates.push(path.join(customBase, skillName));
+    candidates.push(path.join(customBase, 'skills', skillName));
+    candidates.push(path.join(customBase, '.agents', 'skills', skillName));
+    if (path.basename(customBase) === skillName) {
+      candidates.push(customBase);
+    }
+  }
+  if (process.env.SAFE_SKILLS_INSTALL_DIR) {
+    candidates.push(path.join(process.env.SAFE_SKILLS_INSTALL_DIR, skillName));
+    candidates.push(process.env.SAFE_SKILLS_INSTALL_DIR);
+  }
+  if (scope === 'local' || !scope) {
+    candidates.push(path.join(process.cwd(), 'skills', skillName));
+    candidates.push(path.join(process.cwd(), '.agents', 'skills', skillName));
+  }
+  if (scope === 'global' || !scope) {
+    candidates.push(path.join(os.homedir(), '.agents', 'skills', skillName));
+    candidates.push(path.join(os.homedir(), '.claude', 'skills', skillName));
+    candidates.push(path.join(os.homedir(), '.config', 'skills', skillName));
+  }
+  for (const c of candidates) {
+    if (c && fs.existsSync(c) && fs.statSync(c).isDirectory()) {
+      return c;
+    }
+  }
+  return null;
+}
+
+function applyWriteProtection(skillDir) {
+  if (!fs.existsSync(skillDir)) return;
+  function protect(current) {
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const e of entries) {
+      const fullPath = path.join(current, e.name);
+      if (e.isDirectory()) {
+        protect(fullPath);
+        try { fs.chmodSync(fullPath, 0o555); } catch {}
+      } else if (e.isFile()) {
+        try { fs.chmodSync(fullPath, 0o444); } catch {}
+      }
+    }
+    try { fs.chmodSync(current, 0o555); } catch {}
+  }
+  try { protect(skillDir); } catch {}
+}
+
+function runVerify(opts = {}) {
+  bar();
+  console.log(' 🛡️ SAFE-SKILLS INTEGRITY AUDIT');
+  bar();
+
+  const lockFiles = [];
+  if (opts.customLock) {
+    lockFiles.push(opts.customLock);
+  } else {
+    const localLock = process.env.SAFE_SKILLS_LOCAL_LOCKFILE || path.join(process.cwd(), 'skills-lock.json');
+    if (!opts.globalOnly && fs.existsSync(localLock)) lockFiles.push(localLock);
+    if (fs.existsSync(LOCK_FILE)) lockFiles.push(LOCK_FILE);
+  }
+
+  if (!lockFiles.length) {
+    console.log('\nNo skills-lock.json ledger found.');
+    console.log(`Expected at: ${LOCK_FILE} or ./skills-lock.json`);
+    console.log('Install skills with safe-skills to record cryptographic provenance.');
+    bar();
+    return;
+  }
+
+  const combinedSkills = {};
+  for (const lf of lockFiles) {
+    const data = readLockfile(lf);
+    for (const [name, rec] of Object.entries(data.skills || {})) {
+      if (!combinedSkills[name]) combinedSkills[name] = rec;
+    }
+  }
+
+  let names = Object.keys(combinedSkills);
+  if (opts.skillName) {
+    names = names.filter(n => n === opts.skillName);
+    if (!names.length) {
+      console.log(`\nSkill "${opts.skillName}" is not recorded in the ledger.`);
+      bar();
+      return;
+    }
+  }
+  if (!names.length) {
+    console.log('\nCryptographic ledger is empty (no skills tracked).');
+    bar();
+    return;
+  }
+
+  console.log(`\nAuditing ${names.length} tracked skill(s) against cryptographic ledger...\n`);
+
+  let verifiedCount = 0;
+  let tamperedCount = 0;
+  let missingCount = 0;
+  const results = [];
+
+  for (const name of names) {
+    const record = combinedSkills[name];
+    const skillDir = findInstalledSkillDir(name, record.scope, opts.path);
+
+    if (!skillDir) {
+      missingCount++;
+      results.push({ name, status: 'MISSING', details: ['Installed directory not found on disk'] });
+      continue;
+    }
+
+    const currentHashes = computeSkillTreeHashes(skillDir);
+    const recordedFiles = record.files || {};
+    const mismatches = [];
+
+    // 1. Check recorded files
+    for (const [relPath, expectedHash] of Object.entries(recordedFiles)) {
+      if (!currentHashes[relPath]) {
+        mismatches.push(`missing file: ${relPath}`);
+      } else if (currentHashes[relPath] !== expectedHash) {
+        mismatches.push(`tampered: ${relPath} (expected ${expectedHash.slice(0, 16)}..., got ${currentHashes[relPath].slice(0, 16)}...)`);
+      }
+    }
+
+    // 2. Check for newly introduced unexpected files
+    for (const relPath of Object.keys(currentHashes)) {
+      if (!recordedFiles[relPath]) {
+        mismatches.push(`unrecorded file added: ${relPath}`);
+      }
+    }
+
+    if (mismatches.length > 0) {
+      tamperedCount++;
+      results.push({ name, status: 'TAMPERED', dir: skillDir, details: mismatches });
+    } else {
+      verifiedCount++;
+      results.push({ name, status: 'VERIFIED', dir: skillDir, fileCount: Object.keys(recordedFiles).length });
+    }
+  }
+
+  for (const res of results) {
+    if (res.status === 'VERIFIED') {
+      console.log(`  ✔ [VERIFIED]  ${res.name} (${res.fileCount} files verified SHA-256 match)`);
+    } else if (res.status === 'TAMPERED') {
+      console.log(`  🚨 [TAMPERED]  ${res.name} at ${res.dir}`);
+      for (const d of res.details) {
+        console.log(`     └─ ⚠ ${d}`);
+      }
+    } else if (res.status === 'MISSING') {
+      console.log(`  ⚪ [MISSING]   ${res.name} (not found in expected directories)`);
+    }
+  }
+
+  console.log('\nIntegrity Summary:');
+  console.log(`  Verified: ${verifiedCount}`);
+  console.log(`  Tampered: ${tamperedCount}`);
+  console.log(`  Missing:  ${missingCount}`);
+
+  audit({
+    action: 'verify',
+    verified: verifiedCount,
+    tampered: tamperedCount,
+    missing: missingCount,
+    passed: tamperedCount === 0 && (opts.strict ? missingCount === 0 : true),
+  });
+
+  bar();
+
+  if (tamperedCount > 0) {
+    die(`tampering detected in ${tamperedCount} skill(s)! Verify ledger or reinstall.`, 1);
+  }
+  if (opts.strict && missingCount > 0) {
+    die(`strict verification failed: ${missingCount} skill(s) missing from filesystem`, 1);
+  }
+  console.log('\nsafe-skills: all tracked skills passed cryptographic verification.\n');
+}
+
 function runUpdate() {
   bar();
   console.log(' 🔄 SAFE-SKILLS SYSTEM UPDATE');
@@ -341,15 +580,35 @@ function main() {
     runUpdate();
     return;
   }
+  if (args[0] === 'verify') {
+    let customPath = null;
+    let globalOnly = false;
+    let strict = false;
+    let customLock = null;
+    let skillName = null;
+    for (let i = 1; i < args.length; i++) {
+      const a = args[i];
+      if (a === '--path') { customPath = args[++i]; continue; }
+      if (a === '--global' || a === '-g') { globalOnly = true; continue; }
+      if (a === '--strict') { strict = true; continue; }
+      if (a === '--lockfile') { customLock = args[++i]; continue; }
+      if (a === '--skill') { skillName = args[++i]; continue; }
+      if (!skillName && !a.startsWith('-')) { skillName = a; continue; }
+    }
+    runVerify({ path: customPath, globalOnly, strict, customLock, skillName });
+    return;
+  }
   if (!args[0] || args[0] !== 'add') {
-    die('usage: safe-skills <add|update> [args]\n       safe-skills add <source> [--skill name ...] [options]\n       safe-skills update', 2);
+    die('usage: safe-skills <add|update|verify> [args]\n       safe-skills add <source> [--skill name ...] [options]\n       safe-skills verify [--global] [--strict] [--path dir]\n       safe-skills update', 2);
   }
 
-  const reserved = new Set(['--threshold', '--force', '--llm', '--no-llm', '--skill', '--dry-run', '--seed', '--temperature']);
+  const reserved = new Set(['--threshold', '--force', '--llm', '--no-llm', '--skill', '--dry-run', '--seed', '--temperature', '--anti-toctou', '--readonly']);
   let source = null;
   let threshold = 'high';
   let force = false;
   let dryRun = false;
+  let readonly = false;
+  let antiToctou = process.env.SAFE_SKILLS_ANTI_TOCTOU || 'commit'; // 'commit' | 'local' | 'off'
   let forceLLM = null; // true=llm, false=no-llm, null=auto
   const skillNames = [];
   const passthrough = [];
@@ -360,6 +619,13 @@ function main() {
     if (a === '--threshold') { threshold = args[++i]; if (!(threshold in LEVELS)) die(`bad --threshold ${threshold}`, 2); continue; }
     if (a === '--force') { force = true; continue; }
     if (a === '--dry-run') { dryRun = true; continue; }
+    if (a === '--readonly') { readonly = true; continue; }
+    if (a === '--anti-toctou') {
+      const mode = args[++i];
+      if (!['commit', 'local', 'off'].includes(mode)) die(`bad --anti-toctou ${mode || ''} (must be commit, local, or off)`, 2);
+      antiToctou = mode;
+      continue;
+    }
     if (a === '--llm') { forceLLM = true; continue; }
     if (a === '--no-llm') { forceLLM = false; continue; }
     if (a === '--seed') {
@@ -489,9 +755,21 @@ function main() {
     if (skillNames.length) installArgs.push('--skill', label);
   }
 
+  // ── Anti-TOCTOU & SHA Pinning (SOP §16 / v1.3.0) ──
+  let installTarget = source;
+  if (!isLocal(source)) {
+    if (antiToctou === 'local') {
+      installTarget = root;
+      console.log('safe-skills: Anti-TOCTOU active — installing from verified local sandbox');
+    } else if (antiToctou === 'commit' && commit && !source.includes('#')) {
+      installTarget = `${source}#${commit}`;
+      console.log(`safe-skills: Anti-TOCTOU active — pinned downstream install to commit ${commit.slice(0, 12)}`);
+    }
+  }
+
   // ── INSTALL (SOP §16) ──
   if (dryRun) {
-    console.log(`\nsafe-skills: DRY RUN — would run:\n  npx skills add ${source} ${installArgs.join(' ')}`);
+    console.log(`\nsafe-skills: DRY RUN — would run:\n  npx skills add ${installTarget} ${installArgs.join(' ')}`);
     audit({
       repository: metas[0].repo,
       skill: metas.map(m => m.skill).join(','),
@@ -514,10 +792,39 @@ function main() {
 
   console.log(`\nsafe-skills: gate passed — installing ${approved.map(i => metas[i].skill).join(', ')} ...`);
   const [icmd, ...iprefix] = INSTALLER.split(/\s+/).filter(Boolean);
-  const r = sh(icmd, [...iprefix, 'skills', 'add', source, ...installArgs], { stdio: 'inherit' });
+  const r = sh(icmd, [...iprefix, 'skills', 'add', installTarget, ...installArgs], { stdio: 'inherit' });
   if (r.status !== 0) {
     audit({ repository: metas[0].repo, skill: approved.map(i => metas[i].skill).join(','), scope: scope.toLowerCase(), commit, risk_score: reports[0].risk_assessment?.score, severity: reports[0].risk_assessment?.severity, finding_ids: approved.flatMap(i => issues[i].bySeverity.medium.concat(issues[i].bySeverity.high, issues[i].bySeverity.critical).map(f => f.id)), decision: 'install_failed', forced: force || anyBlockedApproved });
     process.exit(r.status);
+  }
+
+  // Update cryptographic integrity ledger (skills-lock.json)
+  const isGlobal = scope === 'GLOBAL';
+  for (const i of approved) {
+    const skillName = metas[i].skill;
+    const targetDir = targets[i].dir;
+    if (targetDir && fs.existsSync(targetDir)) {
+      const hashes = computeSkillTreeHashes(targetDir);
+      updateLockLedger(skillName, {
+        repository: metas[i].repo,
+        commit: metas[i].commit || null,
+        scope: scope.toLowerCase(),
+        installed_at: new Date().toISOString(),
+        files: hashes,
+      }, isGlobal);
+    }
+  }
+
+  // Enforce read-only write protection if requested
+  if (readonly || process.env.SAFE_SKILLS_READONLY === '1') {
+    for (const i of approved) {
+      const skillName = metas[i].skill;
+      const installedDir = findInstalledSkillDir(skillName, scope.toLowerCase());
+      if (installedDir) {
+        applyWriteProtection(installedDir);
+        console.log(`safe-skills: write-protection applied to ${skillName} (${installedDir})`);
+      }
+    }
   }
 
   audit({

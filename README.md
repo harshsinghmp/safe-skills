@@ -151,6 +151,23 @@ Keep `safe-skills` and the underlying NVIDIA SkillSpector scanner updated with o
 safe-skills update
 ```
 
+### 7. Cryptographic Integrity Audit (`safe-skills verify`)
+Audit all installed skills against the cryptographic ledger (`skills-lock.json`) to detect post-installation tampering:
+```bash
+# Verify all installed skills in local project
+safe-skills verify
+
+# Verify a specific skill or audit strictly
+safe-skills verify demo-skill --strict
+```
+
+### 8. Anti-TOCTOU & Read-Only Hardening
+Eliminate Time-of-Check to Time-of-Use network races and enforce read-only execution permissions:
+```bash
+# Pin exact commit SHA and lock directory to chmod 555
+safe-skills add some-org/some-skill --anti-toctou commit --readonly
+```
+
 ---
 
 ## 📊 Sample Terminal Security Review
@@ -292,7 +309,7 @@ npm test && npm run lint
 ## 🗺️ Product Roadmap
 
 Check out [`ROADMAP.md`](ROADMAP.md) for our full multi-milestone plan:
-* **v1.3.0**: Anti-TOCTOU commit SHA pinning, `skills-lock.json` cryptographic integrity ledger, post-install write-protection (`chmod 555`).
+* **v1.3.0**: Anti-TOCTOU commit SHA pinning, `skills-lock.json` cryptographic integrity ledger, `safe-skills verify` audit command, post-install write-protection (`chmod 555`). *(Shipped)*
 * **v1.4.0**: Automated dual-engine cross-validation (SkillSpector + Sentry) and MCP tool schema poisoning defense.
 * **v2.0.0**: Runtime capability manifests (`CAPABILITIES.toml`) and Linux Bubblewrap / Landlock OS sandboxing.
 
