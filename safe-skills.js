@@ -263,10 +263,10 @@ function main() {
   const args = process.argv.slice(2);
   if (args.includes('--version') || args.includes('-V')) { console.log(VERSION); return; }
   if (!args[0] || args[0] !== 'add') {
-    die('usage: safe-skills add <source> [--skill name ...] [options]\n       reserved: --threshold <low|medium|high|critical>  --force  --llm  --no-llm', 2);
+    die('usage: safe-skills add <source> [--skill name ...] [options]\n       reserved: --threshold <low|medium|high|critical>  --force  --llm  --no-llm  --seed <int>  --temperature <float>', 2);
   }
 
-  const reserved = new Set(['--threshold', '--force', '--llm', '--no-llm', '--skill', '--dry-run']);
+  const reserved = new Set(['--threshold', '--force', '--llm', '--no-llm', '--skill', '--dry-run', '--seed', '--temperature']);
   let source = null;
   let threshold = 'high';
   let force = false;
@@ -283,6 +283,19 @@ function main() {
     if (a === '--dry-run') { dryRun = true; continue; }
     if (a === '--llm') { forceLLM = true; continue; }
     if (a === '--no-llm') { forceLLM = false; continue; }
+    if (a === '--seed') {
+      const s = args[++i];
+      if (!s || !/^-?\d+$/.test(s)) die(`bad --seed ${s || ''}`, 2);
+      process.env.SKILLSPECTOR_SEED = s;
+      continue;
+    }
+    if (a === '--temperature') {
+      const t = args[++i];
+      const val = parseFloat(t);
+      if (!t || isNaN(val) || val < 0.0 || val > 2.0) die(`bad --temperature ${t || ''}`, 2);
+      process.env.SKILLSPECTOR_TEMPERATURE = t;
+      continue;
+    }
     if (a === '--skill') {
       const n = args[++i];
       if (!n) die('--skill requires a name', 2);
