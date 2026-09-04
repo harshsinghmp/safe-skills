@@ -136,6 +136,14 @@ function findSkillDirs(root, skillNames) {
   return out;
 }
 
+function detectLockfile(dir, root) {
+  for (const d of [dir, root].filter(Boolean)) {
+    if (fs.existsSync(path.join(d, 'package-lock.json'))) return 'audited (package-lock.json)';
+    if (fs.existsSync(path.join(d, 'npm-shrinkwrap.json'))) return 'audited (npm-shrinkwrap.json)';
+  }
+  return 'none';
+}
+
 // ── scanning ───────────────────────────────────────────────────────────────
 
 function scanTarget(dir, useLLM) {
@@ -209,6 +217,7 @@ function summary(meta, report, issues, level, trusted, staticOnly) {
   console.log(`Scope:      ${meta.scope}`);
   if (meta.commit) console.log(`Commit:     ${meta.commit.slice(0, 12)}`);
   console.log(`Source:     ${trusted ? 'TRUSTED' : 'UNKNOWN'}${staticOnly ? '  (static-only scan)' : ''}`);
+  if (meta.lockfile) console.log(`Lockfile:   ${meta.lockfile}`);
   const ra = report.risk_assessment || {};
   console.log(`\nSkillSpector:`);
   console.log(`  Score: ${ra.score}/100`);
@@ -342,6 +351,7 @@ function main() {
       skill: t.label,
       scope,
       commit,
+      lockfile: detectLockfile(t.dir, root),
     }));
     issues = reports.map(classifyIssues);
   } catch (e) {
