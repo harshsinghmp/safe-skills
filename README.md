@@ -1,35 +1,48 @@
 <div align="center">
 
+<img src="https://raw.githubusercontent.com/harshsinghmp/safe-skills/main/assets/og-banner.png" alt="safe-skills — Zero-Trust Security Gate for AI Agent Skills" width="100%" style="border-radius: 12px; margin-bottom: 24px;" />
+
 # 🛡️ safe-skills
 
 **The Zero-Trust Security Gate & Vulnerability Scanner for AI Agent Skills.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
-[![Scanner: NVIDIA SkillSpector](https://img.shields.io/badge/Scanner-NVIDIA%20SkillSpector-76B900.svg)](https://github.com/nvidia/skillspector)
-[![Platform: Linux & macOS](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-black.svg)]()
+[![NPM Version](https://img.shields.io/npm/v/safe-skills.svg?color=cb3837&style=flat-square)](https://www.npmjs.com/package/safe-skills)
+[![NPM Downloads](https://img.shields.io/npm/dm/safe-skills.svg?color=blue&style=flat-square)](https://www.npmjs.com/package/safe-skills)
+[![CI Test Suite](https://img.shields.io/github/actions/workflow/status/harshsinghmp/safe-skills/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/harshsinghmp/safe-skills/actions)
+[![Scanner: NVIDIA SkillSpector](https://img.shields.io/badge/Scanner-NVIDIA%20SkillSpector-76B900.svg?style=flat-square)](https://github.com/nvidia/skillspector)
+[![Node.js Version](https://img.shields.io/badge/Node-%3E%3D18.0.0-brightgreen.svg?style=flat-square)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-black.svg?style=flat-square)]()
 
-*Scan untrusted AI agent skills for prompt injections, credential theft, reverse shells, and malicious persistence before they touch your filesystem.*
+<p align="center">
+  <b>Intercept, sandbox, and deeply audit untrusted skills before granting them execution privileges in your AI agents.</b>
+  <br />
+  Compatible with <b>Claude Code, Antigravity, OpenCode, Codex CLI, Cursor, and Hermes</b>.
+</p>
+
+[Quickstart](#-quickstart) • [Why safe-skills?](#-why-safe-skills) • [CLI Reference](#-cli-command-reference) • [Policy Engine](#-security-policy--hard-blocks) • [Roadmap](ROADMAP.md)
 
 ---
 
 </div>
 
-## 🚨 The Problem: Agent Skills Are Unvetted Code
+## 🚨 The Threat: Agent Skills Run With Ambient Host Access
 
-Running `npx skills add <repository>` gives third-party repositories direct execution access inside your AI agents (**Claude Code, Antigravity, OpenCode, Hermes, Codex, Cursor**). 
+Running `npx skills add <repository>` grants third-party repositories direct execution capabilities inside your agentic coding workflows. Skills can bundle scripts, lifecycle hooks, and instructions executed directly on your workstation.
 
-Malicious or poorly vetted skills can silently:
-* 🔑 **Exfiltrate environment variables & API keys** (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, AWS credentials).
-* 💣 **Execute arbitrary shell commands (RCE)** through untrusted lifecycle scripts or subagent triggers.
-* 🕵️ **Install hidden persistence** (cron jobs, systemd services, modified shell profiles).
-* 🎭 **Inject indirect prompts** that hijack your agent's instructions during pair-programming sessions.
+Unvetted or malicious skills can silently execute:
+
+* 🔑 **Credential Theft & Exfiltration**: Stealthily harvesting `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, AWS tokens, SSH keys (`~/.ssh/id_rsa`), and `.env` files.
+* 💣 **Arbitrary Remote Code Execution (RCE)**: Executing hidden reverse shells (`nc -e`, `bash -i`) or downloaders through unreviewed lifecycle scripts.
+* 🕵️ **Hidden Host Persistence**: Installing covert cron jobs, systemd services, or modifying user shell profiles (`.zshrc`, `.bashrc`).
+* 🎭 **Indirect Prompt Injection**: Embedding subversive directives in Markdown comments or tool schemas that hijack agent reasoning during pair-programming.
+* 📦 **Supply-Chain Attacks**: Smuggling compromised transitive npm dependencies and unpinned scripts.
 
 ---
 
-## ✨ The Solution: `safe-skills`
+## ✨ The Solution: Transparent Zero-Trust Proxy
 
-`safe-skills` acts as a **transparent security proxy** for `npx skills add`. It intercepts every skill installation request, clones the target into an isolated sandbox, runs deep static and heuristic security scans powered by **NVIDIA SkillSpector**, evaluates the risk score against strict policy thresholds, and requires your explicit consent before anything is installed.
+`safe-skills` acts as a **transparent security proxy** for `npx skills add`. It intercepts every installation command, clones the target into an ephemeral sandbox, executes deep static and LLM security audits powered by **NVIDIA SkillSpector**, evaluates the risk score against strict policy thresholds, and requires your explicit informed consent before anything is installed.
 
 ```
                   ┌─────────────────────────────────────────┐
@@ -45,20 +58,21 @@ Malicious or poorly vetted skills can silently:
                                        ▼
                   ┌─────────────────────────────────────────┐
                   │    2. NVIDIA SkillSpector Scanner       │
-                  │  Static AST • YARA Rules • Heuristics   │
+                  │  Static AST • YARA Rules • Lockfiles    │
+                  │  Deterministic LLM Semantic Analysis    │
                   └────────────────────┬────────────────────┘
                                        │
                                        ▼
                   ┌─────────────────────────────────────────┐
                   │        3. Risk Score & Policy           │
                   │  LOW (0-20) • MED (21-50) • HIGH (51-80)│
-                  │  ⛔ Hard Blocks: RCE / Exfil / Malware  │
+                  │  ⛔ Zero-Tolerance: RCE / Exfil / BH2   │
                   └────────────────────┬────────────────────┘
                                        │
                                        ▼
                   ┌─────────────────────────────────────────┐
                   │   4. Human Consent & Security Review    │
-                  │  Detailed finding breakdown + Prompt    │
+                  │  Finding Breakdown • Audit Log Record   │
                   └────────────────────┬────────────────────┘
                                        │
                     ┌──────────────────┴──────────────────┐
@@ -74,19 +88,19 @@ Malicious or poorly vetted skills can silently:
 
 ## 🚀 Quickstart
 
-### 1-Line Installation (Linux & macOS)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/harshsinghmp/safe-skills/main/install.sh | bash
-```
-
-### Or via NPM (Global)
+### Method 1: Via NPM (Recommended)
 
 ```bash
 npm install -g safe-skills
 ```
 
-### Or Manual Clone
+### Method 2: 1-Line Universal Installer (Linux & macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/harshsinghmp/safe-skills/main/install.sh | bash
+```
+
+### Method 3: Manual Clone
 
 ```bash
 git clone https://github.com/harshsinghmp/safe-skills.git ~/.local/share/safe-skills
@@ -94,40 +108,54 @@ ln -s ~/.local/share/safe-skills/bin/safe-skills ~/.local/bin/safe-skills
 ln -s ~/.local/share/safe-skills/bin/skills ~/.local/bin/skills
 ```
 
+> [!NOTE]
+> The installer automatically provisions the `skills` alias, allowing you to use `skills add <repo>` as a drop-in replacement for `npx skills add`.
+
 ---
 
-## 💻 Usage
+## 💻 Usage Examples
 
-Run `safe-skills add <repository>` (or simply `skills add <repository>` via the included alias):
-
+### 1. Basic Scan & Install
+Scan an untrusted repository and review its risk profile before installation:
 ```bash
-# Basic usage (scans repository and prompts for consent)
 safe-skills add anthropics/anthropic-quickstarts
+```
 
-# Add a specific skill from a multi-skill mono-repo
+### 2. Multi-Skill Repository (Targeted Scan)
+Extract and audit an individual skill from a mono-repo:
+```bash
 safe-skills add getsentry/skills --skill skill-scanner
+```
 
-# Dry-run mode (scans and displays risk report without installing)
+### 3. Dry-Run Mode
+Inspect a skill's vulnerability findings without modifying your system:
+```bash
 safe-skills add JuliusBrussee/cavekit --dry-run
+```
 
-# Run static-only analysis (bypasses LLM provider inference)
-safe-skills add some-org/some-skill --no-llm
-
-# Enforce a strict risk threshold (blocks anything above MEDIUM)
-safe-skills add some-org/some-skill --threshold medium
-
-# Deterministic LLM sampling (NVIDIA SkillSpector v2.11+)
+### 4. Deterministic LLM Sampling (SkillSpector v2.11+)
+Pin sampling parameters for reproducible audit scoring:
+```bash
 safe-skills add some-org/some-skill --seed 42 --temperature 0.0
+```
 
-# Update safe-skills and NVIDIA SkillSpector scanner
+### 5. Enforce Strict Security Ceilings
+Reject any skill that exceeds a custom risk threshold:
+```bash
+safe-skills add some-org/some-skill --threshold medium
+```
+
+### 6. Single-Source Self-Update
+Keep `safe-skills` and the underlying NVIDIA SkillSpector scanner updated with one command:
+```bash
 safe-skills update
 ```
 
 ---
 
-## 📊 Sample Security Review Output
+## 📊 Sample Terminal Security Review
 
-When you run `safe-skills add`, you are presented with a detailed, color-coded security review:
+When you invoke `safe-skills add`, you receive an instant terminal breakdown:
 
 ```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -137,7 +165,8 @@ When you run `safe-skills add`, you are presented with a detailed, color-coded s
 Repository: https://github.com/example/untrusted-skill
 Skill:      crypto-helper
 Scope:      LOCAL
-Source:     UNKNOWN  (static-only scan)
+Commit:     7a8f3b9c12de
+Source:     UNKNOWN
 Lockfile:   audited (package-lock.json)
 
 SkillSpector:
@@ -145,7 +174,7 @@ SkillSpector:
   Severity: MEDIUM
   Recommendation: REVIEW_CAREFULLY
 
-Files: SKILL.md, scripts/fetch_price.py, package.json
+Files: SKILL.md, scripts/fetch_price.py, package.json, hooks/hooks.json
 
 Findings:
   Critical: 0
@@ -154,49 +183,72 @@ Findings:
   Low:      2
 
 Findings at or above threshold:
-  MEDIUM network_access — Outbound HTTP request detected in scripts/fetch_price.py:L14
+  MEDIUM network_access — Outbound HTTP socket transmission in scripts/fetch_price.py:L14
+  MEDIUM BH1 — Untrusted bundled lifecycle hook registered in hooks/hooks.json
 
 Decision:  MEDIUM
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Install crypto-helper? [y/N]: 
+⚠ MEDIUM risk — secondary review recommended.
+Install "crypto-helper" anyway? [y/N]
 ```
 
 ---
 
-## 🔒 Security Policies & Hard Blocks
+## 🔒 Security Policy & Hard Blocks
 
-### 1. Risk Score Tiers
-* **LOW (0–20)**: Clean static analysis, trusted patterns $\rightarrow$ Prompted for standard install.
-* **MEDIUM (21–50)**: Contains network calls, script hooks, bundled lifecycle hooks (`BH1`), or permission modifications (`BH3`) $\rightarrow$ Flagged with warning for secondary review.
-* **HIGH (51–80)**: Suspicious obfuscation, dynamic execution $\rightarrow$ Blocked by default.
-* **CRITICAL (81–100)**: Known exploits, privilege escalation $\rightarrow$ Hard blocked.
+### 1. Four-Tier Risk Policy
+| Tier | Score Range | Default Behavior | Criteria & Findings |
+| :--- | :---: | :---: | :--- |
+| **`LOW`** | **0 – 20** | **Auto-Install** | Clean static analysis, trusted sources, zero suspicious hooks. |
+| **`MEDIUM`** | **21 – 50** | **Prompt Required** | Network requests, script hooks, bundled lifecycle hooks (`BH1`), or permission tampering (`BH3`). |
+| **`HIGH`** | **51 – 80** | **Blocked** | Obfuscated code, unpinned supply-chain dependencies, high-severity CVEs. |
+| **`CRITICAL`** | **81 – 100** | **Blocked** | Known exploits, remote exfiltration, backdoor patterns. |
 
-### 2. Zero-Tolerance Hard Blocks (Non-Overridable)
-`safe-skills` automatically halts execution regardless of score if any of the following patterns are detected:
-* ⛔ **Credential / Secret Theft** (`~/.ssh`, `~/.aws/credentials`, `~/.env`, browser cookies)
-* ⛔ **Data Exfiltration & Remote Transfer** (`BH2`, unauthorized outbound socket connections transmitting local file contents)
-* ⛔ **Reverse Shells / Remote Code Execution (RCE)** (`nc -e`, `bash -i`, dynamic `eval` payloads)
-* ⛔ **Malicious Persistence** (tampering with `/etc/systemd`, crontabs, or `.zshrc`/`.bashrc` hooks)
+### 2. Zero-Tolerance Hard Blocks (Non-Overridable by Default)
+Regardless of the calculated numerical score, `safe-skills` halts execution immediately if any of the following are detected:
+* ⛔ **`BH2` Remote Transfer**: Directly proven unauthorized exfiltration of sensitive tokens or context.
+* ⛔ **Credential Access**: Tampering with `~/.ssh`, `~/.aws`, `~/.env`, or system keychains.
+* ⛔ **Remote Code Execution (RCE)**: `nc -e`, `bash -i`, dynamic `eval`, or unverified subprocess spawning.
+* ⛔ **Host Persistence**: Writes to `/etc/systemd`, crontabs, or user shell dotfiles (`.zshrc`/`.bashrc`).
+
+> [!WARNING]
+> Bypassing a hard block requires explicit interactive confirmation or the `--force` flag. All forced overrides are recorded to the immutable audit trail.
 
 ---
 
-## ⚙️ Configuration
+## 🛠️ CLI Command Reference
 
-### 1. Allowlist (`~/.config/safe-skills/allowlist.toml`)
-You can whitelist trusted organizations or internal repositories so they skip interactive prompts:
+| Flag | Argument | Default | Description |
+| :--- | :---: | :---: | :--- |
+| `--skill` | `<name>` | all | Target a specific skill directory inside a repository. |
+| `--threshold` | `<lvl>` | `high` | Set maximum allowed risk before blocking (`low`, `medium`, `high`, `critical`). |
+| `--seed` | `<int>` | none | Forward deterministic seed to SkillSpector v2.11 for reproducible evaluation. |
+| `--temperature` | `<float>` | none | Set LLM sampling temperature (valid range: `0.0` to `2.0`). |
+| `--dry-run` | flag | `false` | Execute full sandbox scan and log audit without invoking installer. |
+| `--no-llm` | flag | `false` | Run static AST & YARA analysis only (skips LLM provider calls). |
+| `--llm` | flag | `auto` | Force LLM semantic review pass. |
+| `--force` | flag | `false` | Allow prompting for manual bypass on high-risk/blocked skills. |
+| `-g`, `--global` | flag | `false` | Pass global installation scope to downstream agent installer. |
+
+---
+
+## ⚙️ Configuration & Secrets
+
+### 1. Trusted Repository Allowlist (`~/.config/safe-skills/allowlist.toml`)
+Trusted repositories skip interactive prompts if their scan score is `LOW`:
 
 ```toml
-# ~/.config/safe-skills/allowlist.toml
-trusted_repositories = [
-  "anthropics/*",
-  "github.com/vercel/*",
-  "github.com/my-agency/*"
+[trusted_sources]
+repositories = [
+  "anthropics/skills",
+  "vercel-labs/agent-skills",
+  "github.com/my-org/*"
 ]
 ```
 
-### 2. API Keys & Sampling Configuration (`~/.config/safe-skills/keys.env`)
-You can configure LLM provider keys and default deterministic sampling controls:
+### 2. Provider Keys & Deterministic Sampling (`~/.config/safe-skills/keys.env`)
+Configure provider keys and sampling defaults locally outside version control:
 
 ```bash
 # ~/.config/safe-skills/keys.env
@@ -206,39 +258,46 @@ SKILLSPECTOR_SEED=42
 SKILLSPECTOR_TEMPERATURE=0.0
 ```
 
-### 3. Audit Trail (`~/.local/share/safe-skills/audit.jsonl`)
-Every single scan and installation decision (approved, declined, or blocked) is appended to a structured JSON Lines audit file:
+### 3. Structured Audit Ledger (`~/.local/share/safe-skills/audit.jsonl`)
+Every single scan and installation decision is written to an append-only JSON Lines ledger:
 
 ```json
 {
-  "timestamp": "2026-08-16T17:29:49.123Z",
-  "repo": "JuliusBrussee/cavekit",
-  "skill": "cavekit",
-  "score": 0,
-  "decision": "SAFE",
-  "approved": true
+  "timestamp": "2026-09-04T12:00:00.000Z",
+  "repository": "example/untrusted-skill",
+  "skill": "crypto-helper",
+  "scope": "local",
+  "commit": "7a8f3b9c12de",
+  "risk_score": 35,
+  "severity": "MEDIUM",
+  "decision": "approved",
+  "forced": false
 }
 ```
 
 ---
 
-## 🧪 Testing
+## 🧪 Verification & Test Suite
 
-`safe-skills` comes with a complete integration test suite with zero external network dependencies:
+`safe-skills` includes an end-to-end integration test suite with zero external network dependencies:
 
 ```bash
 npm test
-# Or: bash test/run.sh
+# Or run with syntax linting:
+npm test && npm run lint
 ```
 
 ---
 
-## 🤝 Contributing
+## 🗺️ Product Roadmap
 
-Contributions are welcome! Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md) before submitting a pull request.
+Check out [`ROADMAP.md`](ROADMAP.md) for our full multi-milestone plan:
+* **v1.3.0**: Anti-TOCTOU commit SHA pinning, `skills-lock.json` cryptographic integrity ledger, post-install write-protection (`chmod 555`).
+* **v1.4.0**: Automated dual-engine cross-validation (SkillSpector + Sentry) and MCP tool schema poisoning defense.
+* **v2.0.0**: Runtime capability manifests (`CAPABILITIES.toml`) and Linux Bubblewrap / Landlock OS sandboxing.
 
 ---
 
-## 📄 License
+## 📄 License & Integrity
 
-This project is licensed under the **MIT License** — see the [`LICENSE`](LICENSE) file for details.
+Distributed under the [MIT License](LICENSE). Built for the developer agent ecosystem by [Harsh](https://github.com/harshsinghmp).
