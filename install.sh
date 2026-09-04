@@ -60,7 +60,7 @@ if [[ -f "$SCRIPT_DIR/safe-skills.js" ]]; then
   cp -r "$SCRIPT_DIR/"* "$INSTALL_DIR/" 2>/dev/null || true
 else
   say "Downloading latest safe-skills release..."
-  git clone --depth 1 https://github.com/your-username/safe-skills.git "$INSTALL_DIR" 2>/dev/null || (cd "$INSTALL_DIR" && git pull)
+  git clone --depth 1 https://github.com/harshsinghmp/safe-skills.git "$INSTALL_DIR" 2>/dev/null || (cd "$INSTALL_DIR" && git pull)
 fi
 
 # 5. Symlink binaries & allowlist

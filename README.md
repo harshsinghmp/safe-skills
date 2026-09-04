@@ -118,6 +118,9 @@ safe-skills add some-org/some-skill --threshold medium
 
 # Deterministic LLM sampling (NVIDIA SkillSpector v2.11+)
 safe-skills add some-org/some-skill --seed 42 --temperature 0.0
+
+# Update safe-skills and NVIDIA SkillSpector scanner
+safe-skills update
 ```
 
 ---
