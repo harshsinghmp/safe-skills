@@ -1,6 +1,6 @@
 {
   "name": "safe-skills",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Security gate and vulnerability scanner wrapper for npx skills add, powered by NVIDIA SkillSpector.",
   "main": "safe-skills.js",
   "bin": {
