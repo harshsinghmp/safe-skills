@@ -22,7 +22,7 @@ if (process.env.SAFE_SKILLS_PASSTHROUGH === '1') {
   process.exit(r.status ?? 0);
 }
 
-const VERSION = '1.3.5';
+const VERSION = '1.3.6';
 
 const CONFIG_DIR = process.env.SAFE_SKILLS_CONFIG || path.join(os.homedir(), '.config', 'safe-skills');
 const DATA_DIR = process.env.SAFE_SKILLS_DATA || path.join(os.homedir(), '.local', 'share', 'safe-skills');
@@ -108,7 +108,7 @@ function readAllowlist() {
 }
 
 function normalizeSource(source) {
-  let s = source.replace(/^https?:\/\//, '').replace(/^git@github\.com:/, '').replace(/\.git$/, '');
+  let s = (source || '').replace(/#.*$/, '').replace(/^https?:\/\//, '').replace(/^git@github\.com:/, '').replace(/\.git$/, '');
   const m = s.match(/^(github\.com\/)?([^/]+\/[^/]+)/);
   return m ? m[2] : null;
 }
@@ -978,15 +978,16 @@ function main() {
     if (skillNames.length) installArgs.push('--skill', label);
   }
 
-  // ── Anti-TOCTOU & SHA Pinning (SOP §16 / v1.3.0) ──
-  let installTarget = source;
+  // ── Anti-TOCTOU & Clean Target (SOP §16 / v1.3.6) ──
+  // Strip any trailing `#<ref>` to keep downstream target clean (<owner>/<repo>).
+  // Downstream `skills add` executes `git clone --depth 1 --branch <ref>` which rejects commit SHAs.
+  let installTarget = isLocal(source) ? source : source.replace(/#.*$/, '');
   if (!isLocal(source)) {
     if (antiToctou === 'local') {
       installTarget = root;
       console.log('safe-skills: Anti-TOCTOU active — installing from verified local sandbox');
-    } else if (antiToctou === 'commit' && commit && !source.includes('#')) {
-      installTarget = `${source}#${commit}`;
-      console.log(`safe-skills: Anti-TOCTOU active — pinned downstream install to commit ${commit.slice(0, 12)}`);
+    } else if (antiToctou === 'commit') {
+      console.log(`safe-skills: Anti-TOCTOU notice — commit pinning (${commit.slice(0, 12)}) omitted to preserve clean package target`);
     }
   }
 

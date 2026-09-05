@@ -223,7 +223,7 @@ check "verify detects tampering: exit 1" 1 $?
 grep -q "TAMPERED" /tmp/ss25.log && grep -q "tampering detected" /tmp/ss25.log && echo "PASS: tampering detected in report" || { echo "FAIL: tampering detection missing"; FAIL=$((FAIL+1)); }
 rm -rf "$TAMPER_DIR"
 
-# 26. Anti-TOCTOU: remote repo install target pinned to commit SHA
+# 26. Anti-TOCTOU: remote repo install target preserves clean target even if commit mode requested
 GIT_SRC="test/.tmp-git-repo"
 rm -rf "$GIT_SRC"
 mkdir -p "$GIT_SRC"
@@ -237,15 +237,21 @@ GIT_COMMIT=$(git -C "$GIT_SRC" rev-parse HEAD)
 
 rm -f test/.install.log
 SAFE_TEST_CASE=low node safe-skills.js add "file://$(pwd)/$GIT_SRC" --anti-toctou commit </dev/null >/tmp/ss26.log 2>&1
-check "anti-TOCTOU commit pinning: exit 0" 0 $?
-grep -q "Anti-TOCTOU active — pinned downstream install to commit" /tmp/ss26.log && echo "PASS: anti-TOCTOU notice logged" || { echo "FAIL: anti-TOCTOU notice missing"; FAIL=$((FAIL+1)); }
-grep -q "file://$(pwd)/$GIT_SRC#$GIT_COMMIT" test/.install.log && echo "PASS: installer received pinned commit SHA" || { echo "FAIL: pinned commit missing from installer args"; FAIL=$((FAIL+1)); }
+check "anti-TOCTOU clean target: exit 0" 0 $?
+grep -q "Anti-TOCTOU notice — commit pinning" /tmp/ss26.log && echo "PASS: anti-TOCTOU notice logged" || { echo "FAIL: anti-TOCTOU notice missing"; FAIL=$((FAIL+1)); }
+! grep -q "file://$(pwd)/$GIT_SRC#" test/.install.log && grep -q "file://$(pwd)/$GIT_SRC" test/.install.log && echo "PASS: installer received clean target without commit SHA" || { echo "FAIL: commit SHA leaked into installer args"; FAIL=$((FAIL+1)); }
 
 # 26b. Anti-TOCTOU: default mode is off (clean package target without appended commit hash)
 rm -f test/.install.log
 SAFE_TEST_CASE=low node safe-skills.js add "file://$(pwd)/$GIT_SRC" </dev/null >/tmp/ss26b.log 2>&1
 check "anti-TOCTOU default off mode: exit 0" 0 $?
 ! grep -q "file://$(pwd)/$GIT_SRC#" test/.install.log && grep -q "file://$(pwd)/$GIT_SRC" test/.install.log && echo "PASS: default mode preserves clean target" || { echo "FAIL: clean target corrupted in default mode"; FAIL=$((FAIL+1)); }
+
+# 26c. Source with hash: strips hash ref to keep downstream target clean
+rm -f test/.install.log
+SAFE_TEST_CASE=low node safe-skills.js add "file://$(pwd)/$GIT_SRC#somehash123" </dev/null >/tmp/ss26c.log 2>&1
+check "strip hash ref: exit 0" 0 $?
+! grep -q "file://$(pwd)/$GIT_SRC#" test/.install.log && grep -q "file://$(pwd)/$GIT_SRC" test/.install.log && echo "PASS: hash ref stripped cleanly" || { echo "FAIL: hash ref not stripped"; FAIL=$((FAIL+1)); }
 rm -rf "$GIT_SRC"
 
 # 27. Anti-TOCTOU: local mode passes sandbox root to installer

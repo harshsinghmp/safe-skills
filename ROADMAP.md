@@ -36,7 +36,7 @@ To establish `safe-skills` as the universal zero-trust security gate, integrity 
 - [x] **Repository Metadata Sanitization**: Clean package metadata, normalized repository URLs, and automated GitHub release notes.
 
 ### 🛡️ v1.3.0 — Cryptographic Integrity & Anti-TOCTOU Defense (Current)
-- [x] **Anti-TOCTOU SHA Pinning (`<repo>#<sha>`)**: Eliminates Time-of-Check to Time-of-Use race conditions by automatically pinning remote installs to the exact verified commit SHA.
+- [x] **Clean Package Syntax & Ref Stripping**: Preserves clean repository targets (`<owner>/<repo>`) without commit hash refs to prevent downstream `git clone --branch` failures.
 - [x] **Local Sandbox Mode (`--anti-toctou local`)**: Installs directly from the verified ephemeral sandbox directory, guaranteeing zero additional network bytes fetched.
 - [x] **Cryptographic Integrity Ledger (`skills-lock.json`)**: Automatically calculates and records SHA-256 tree hashes for all approved skill files at install time.
 - [x] **Integrity Verifier Command (`safe-skills verify`)**: Audits installed skills against the ledger to detect tampering, missing files, or unauthorized post-install modifications.

@@ -173,8 +173,8 @@ safe-skills verify demo-skill --strict
 ### 8. Anti-TOCTOU & Read-Only Hardening
 Eliminate Time-of-Check to Time-of-Use network races and enforce read-only execution permissions:
 ```bash
-# Pin exact commit SHA and lock directory to chmod 555
-safe-skills add some-org/some-skill --anti-toctou commit --readonly
+# Install directly from verified sandbox directory and lock directory to chmod 555
+safe-skills add some-org/some-skill --anti-toctou local --readonly
 ```
 
 ---
