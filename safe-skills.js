@@ -16,6 +16,12 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+if (process.env.SAFE_SKILLS_PASSTHROUGH === '1') {
+  const [icmd, ...iprefix] = (process.env.SAFE_SKILLS_UPSTREAM || 'npx --yes --package=skills -- skills').split(/\s+/).filter(Boolean);
+  const r = spawnSync(icmd, [...iprefix, ...process.argv.slice(2)], { stdio: 'inherit' });
+  process.exit(r.status ?? 0);
+}
+
 const VERSION = '1.3.0';
 
 const CONFIG_DIR = process.env.SAFE_SKILLS_CONFIG || path.join(os.homedir(), '.config', 'safe-skills');
@@ -25,7 +31,7 @@ const AUDIT_FILE = path.join(DATA_DIR, 'audit.jsonl');
 const LOCK_FILE = process.env.SAFE_SKILLS_LOCKFILE || path.join(DATA_DIR, 'skills-lock.json');
 
 const SCANNER = process.env.SAFE_SKILLS_SCANNER || 'skillspector';
-const INSTALLER = process.env.SAFE_SKILLS_INSTALLER || 'npx';
+const INSTALLER = process.env.SAFE_SKILLS_INSTALLER || 'npx --yes --package=skills --';
 
 // Score policy (SOP §07). HIGH/CRITICAL blocked by default.
 const SCORE_POLICY = [
@@ -113,9 +119,24 @@ function isLocal(src) {
   return src.startsWith('./') || src.startsWith('/') || src.startsWith('~') || fs.existsSync(src);
 }
 
+function toGitUrl(source) {
+  if (isLocal(source)) return source;
+  if (/^(git@[^:]+:|https?:\/\/)/.test(source)) return source;
+  const m = source.match(/^([^/]+)\/([^/]+?)(?:#(.+))?$/);
+  if (m) {
+    const branch = m[3] ? `#${m[3]}` : '';
+    return `https://github.com/${m[1]}/${m[2]}.git${branch}`;
+  }
+  return source;
+}
+
 function cloneSource(source, tmpDir) {
-  console.log(`safe-skills: resolving ${source} ...`);
-  sh('git', ['clone', '--depth', '1', source, tmpDir], { stdio: 'inherit' });
+  const gitUrl = toGitUrl(source);
+  console.log(`safe-skills: resolving ${source} (${gitUrl}) ...`);
+  const cloneRes = sh('git', ['clone', '--depth', '1', gitUrl.replace(/#.*$/, ''), tmpDir], { stdio: 'inherit' });
+  if (cloneRes.status !== 0) {
+    die(`failed to clone repository from "${gitUrl}" (exit code ${cloneRes.status})`, 1);
+  }
   const r = sh('git', ['rev-parse', 'HEAD'], { cwd: tmpDir });
   return r.stdout.trim();
 }
@@ -599,6 +620,12 @@ function main() {
     return;
   }
   if (!args[0] || args[0] !== 'add') {
+    const binBase = path.basename(process.argv[1] || '').replace(/\.js$/, '');
+    if (binBase === 'skills' && args[0] && !['update', 'verify'].includes(args[0])) {
+      const [icmd, ...iprefix] = (process.env.SAFE_SKILLS_UPSTREAM || 'npx --yes --package=skills -- skills').split(/\s+/).filter(Boolean);
+      const r = spawnSync(icmd, [...iprefix, ...args], { stdio: 'inherit' });
+      process.exit(r.status ?? 0);
+    }
     die('usage: safe-skills <add|update|verify> [args]\n       safe-skills add <source> [--skill name ...] [options]\n       safe-skills verify [--global] [--strict] [--path dir]\n       safe-skills update', 2);
   }
 
@@ -792,7 +819,10 @@ function main() {
 
   console.log(`\nsafe-skills: gate passed — installing ${approved.map(i => metas[i].skill).join(', ')} ...`);
   const [icmd, ...iprefix] = INSTALLER.split(/\s+/).filter(Boolean);
-  const r = sh(icmd, [...iprefix, 'skills', 'add', installTarget, ...installArgs], { stdio: 'inherit' });
+  const r = sh(icmd, [...iprefix, 'skills', 'add', installTarget, ...installArgs], {
+    stdio: 'inherit',
+    env: { ...process.env, SAFE_SKILLS_PASSTHROUGH: '1' }
+  });
   if (r.status !== 0) {
     audit({ repository: metas[0].repo, skill: approved.map(i => metas[i].skill).join(','), scope: scope.toLowerCase(), commit, risk_score: reports[0].risk_assessment?.score, severity: reports[0].risk_assessment?.severity, finding_ids: approved.flatMap(i => issues[i].bySeverity.medium.concat(issues[i].bySeverity.high, issues[i].bySeverity.critical).map(f => f.id)), decision: 'install_failed', forced: force || anyBlockedApproved });
     process.exit(r.status);
