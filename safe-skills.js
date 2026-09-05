@@ -22,7 +22,7 @@ if (process.env.SAFE_SKILLS_PASSTHROUGH === '1') {
   process.exit(r.status ?? 0);
 }
 
-const VERSION = '1.3.6';
+const VERSION = '1.3.7';
 
 const CONFIG_DIR = process.env.SAFE_SKILLS_CONFIG || path.join(os.homedir(), '.config', 'safe-skills');
 const DATA_DIR = process.env.SAFE_SKILLS_DATA || path.join(os.homedir(), '.local', 'share', 'safe-skills');
@@ -831,7 +831,7 @@ function main() {
   let force = false;
   let dryRun = false;
   let readonly = false;
-  let antiToctou = process.env.SAFE_SKILLS_ANTI_TOCTOU || 'off'; // 'commit' | 'local' | 'off'
+  let antiToctou = process.env.SAFE_SKILLS_ANTI_TOCTOU || 'off'; // 'local' | 'off'
   let forceLLM = null; // true=llm, false=no-llm, null=auto
   const skillNames = [];
   const passthrough = [];
@@ -845,7 +845,7 @@ function main() {
     if (a === '--readonly') { readonly = true; continue; }
     if (a === '--anti-toctou') {
       const mode = args[++i];
-      if (!['commit', 'local', 'off'].includes(mode)) die(`bad --anti-toctou ${mode || ''} (must be commit, local, or off)`, 2);
+      if (!['local', 'off'].includes(mode)) die(`bad --anti-toctou ${mode || ''} (must be local or off)`, 2);
       antiToctou = mode;
       continue;
     }
@@ -978,17 +978,13 @@ function main() {
     if (skillNames.length) installArgs.push('--skill', label);
   }
 
-  // ── Anti-TOCTOU & Clean Target (SOP §16 / v1.3.6) ──
+  // ── Clean Target & Local Sandbox Mode ──
   // Strip any trailing `#<ref>` to keep downstream target clean (<owner>/<repo>).
   // Downstream `skills add` executes `git clone --depth 1 --branch <ref>` which rejects commit SHAs.
   let installTarget = isLocal(source) ? source : source.replace(/#.*$/, '');
-  if (!isLocal(source)) {
-    if (antiToctou === 'local') {
-      installTarget = root;
-      console.log('safe-skills: Anti-TOCTOU active — installing from verified local sandbox');
-    } else if (antiToctou === 'commit') {
-      console.log(`safe-skills: Anti-TOCTOU notice — commit pinning (${commit.slice(0, 12)}) omitted to preserve clean package target`);
-    }
+  if (!isLocal(source) && antiToctou === 'local') {
+    installTarget = root;
+    console.log('safe-skills: Anti-TOCTOU active — installing from verified local sandbox');
   }
 
   // ── INSTALL (SOP §16) ──
