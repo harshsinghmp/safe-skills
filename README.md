@@ -146,9 +146,18 @@ safe-skills add some-org/some-skill --threshold medium
 ```
 
 ### 6. Single-Source Self-Update
-Keep `safe-skills` and the underlying NVIDIA SkillSpector scanner updated with one command:
+Keep `safe-skills` and the underlying NVIDIA SkillSpector scanner updated with one command (auto-detects npm, bun, or git environments, or can be specified explicitly):
 ```bash
+# Auto-detects package manager (npm, bun, or GitHub git clone)
 safe-skills update
+
+# Or specify update source explicitly
+safe-skills update --npm
+safe-skills update --bun
+safe-skills update --github
+
+# Check for updates without installing
+safe-skills update --check
 ```
 
 ### 7. Cryptographic Integrity Audit (`safe-skills verify`)
