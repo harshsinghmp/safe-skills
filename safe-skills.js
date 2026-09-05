@@ -22,7 +22,7 @@ if (process.env.SAFE_SKILLS_PASSTHROUGH === '1') {
   process.exit(r.status ?? 0);
 }
 
-const VERSION = '1.3.1';
+const VERSION = '1.3.2';
 
 const CONFIG_DIR = process.env.SAFE_SKILLS_CONFIG || path.join(os.homedir(), '.config', 'safe-skills');
 const DATA_DIR = process.env.SAFE_SKILLS_DATA || path.join(os.homedir(), '.local', 'share', 'safe-skills');
@@ -525,66 +525,242 @@ function runVerify(opts = {}) {
   console.log('\nsafe-skills: all tracked skills passed cryptographic verification.\n');
 }
 
-function runUpdate() {
+function parseSemver(v) {
+  const clean = (v || '').replace(/^v/, '').trim();
+  const parts = clean.split('.').map(n => parseInt(n, 10) || 0);
+  while (parts.length < 3) parts.push(0);
+  return parts;
+}
+
+function compareSemver(v1, v2) {
+  const [a1, b1, c1] = parseSemver(v1);
+  const [a2, b2, c2] = parseSemver(v2);
+  if (a1 !== a2) return a1 - a2;
+  if (b1 !== b2) return b1 - b2;
+  return c1 - c2;
+}
+
+function detectUpdateMethod(opts = {}) {
+  if (opts.npm) return 'npm';
+  if (opts.bun) return 'bun';
+  if (opts.github || opts.git) return 'github';
+  if (process.env.SAFE_SKILLS_UPDATE_METHOD) {
+    return process.env.SAFE_SKILLS_UPDATE_METHOD.toLowerCase();
+  }
+
+  const argv1 = process.argv[1] || '';
+  const scriptDir = path.resolve(__dirname);
+
+  // 1. Bun runtime or bin path
+  if (process.versions?.bun || argv1.includes('/.bun/') || argv1.includes('\\.bun\\') || scriptDir.includes('/.bun/')) {
+    return 'bun';
+  }
+
+  // 2. Installed inside DATA_DIR with a git repo
+  if (scriptDir.startsWith(DATA_DIR) && fs.existsSync(path.join(DATA_DIR, '.git'))) {
+    return 'github';
+  }
+
+  // 3. Node/npm environment
+  if (argv1.includes('/node_modules/') || argv1.includes('/.nvm/') || argv1.includes('/npm/')) {
+    return 'npm';
+  }
+
+  // 4. Check available binaries on PATH
+  try {
+    if (sh('which', ['npm']).status === 0) return 'npm';
+  } catch {}
+  try {
+    if (sh('which', ['bun']).status === 0) return 'bun';
+  } catch {}
+
+  if (fs.existsSync(path.join(DATA_DIR, '.git'))) {
+    return 'github';
+  }
+
+  return 'npm';
+}
+
+function runUpdate(opts = {}) {
   bar();
   console.log(' 🔄 SAFE-SKILLS SYSTEM UPDATE');
   bar();
   console.log(`\nInstalled version: v${VERSION}`);
 
   // 1. Update safe-skills
-  const scriptDir = path.resolve(__dirname);
-  const gitDir = fs.existsSync(path.join(scriptDir, '.git'))
-    ? scriptDir
-    : fs.existsSync(path.join(DATA_DIR, '.git'))
-      ? DATA_DIR
-      : null;
+  const method = detectUpdateMethod(opts);
+  console.log(`Update method:     ${method.toUpperCase()}`);
 
-  if (gitDir) {
-    console.log(`\nUpdating safe-skills via git repository (${gitDir})...`);
-    try {
-      const pull = sh('git', ['pull', '--ff-only'], { cwd: gitDir });
-      if (pull.status === 0) {
-        console.log(pull.stdout.trim() || 'safe-skills is already up to date.');
-      } else {
-        console.log(`git update notice: ${pull.stderr.trim() || 'already up to date or local branch'}`);
-      }
-    } catch (e) {
-      console.log(`git update failed: ${e.message}`);
+  if (process.env.SAFE_SKILLS_UPDATE_CMD) {
+    console.log(`\nExecuting update command: ${process.env.SAFE_SKILLS_UPDATE_CMD}`);
+    if (!opts.dryRun) {
+      const [cmd, ...cargs] = process.env.SAFE_SKILLS_UPDATE_CMD.split(/\s+/).filter(Boolean);
+      sh(cmd, cargs, { stdio: 'inherit' });
     }
-  } else {
-    console.log('\nChecking for safe-skills updates via npm...');
+  } else if (method === 'npm') {
+    let latestVersion = null;
     try {
-      const npmUp = sh('npm', ['install', '-g', 'safe-skills@latest'], { stdio: 'inherit' });
-      if (npmUp.status === 0) console.log('safe-skills updated to latest npm release.');
-    } catch (e) {
-      console.log(`npm update failed: ${e.message}`);
+      const vCheck = sh('npm', ['view', 'safe-skills', 'version']);
+      if (vCheck.status === 0 && vCheck.stdout.trim()) {
+        latestVersion = vCheck.stdout.trim();
+      }
+    } catch {}
+
+    if (latestVersion) {
+      console.log(`Latest published npm version: v${latestVersion}`);
+      const cmp = compareSemver(latestVersion, VERSION);
+      if (cmp > 0) {
+        console.log(`Update available: v${VERSION} -> v${latestVersion}`);
+      } else if (cmp < 0) {
+        console.log(`Installed version (v${VERSION}) is ahead of latest published npm release (v${latestVersion}).`);
+      } else {
+        console.log('safe-skills is already on the latest version.');
+      }
+    }
+
+    if (opts.check) {
+      // Check only
+    } else if (opts.dryRun) {
+      console.log('\n[dry-run] Would execute: npm install -g safe-skills@latest');
+    } else {
+      console.log('\nUpdating safe-skills via npm (npm install -g safe-skills@latest)...');
+      try {
+        const npmUp = sh('npm', ['install', '-g', 'safe-skills@latest'], { stdio: 'inherit' });
+        if (npmUp.status === 0) {
+          console.log('safe-skills updated successfully to latest npm release.');
+        } else {
+          console.log(`npm update failed with exit code ${npmUp.status}`);
+        }
+      } catch (e) {
+        console.log(`npm update failed: ${e.message}`);
+      }
+    }
+  } else if (method === 'bun') {
+    let latestVersion = null;
+    try {
+      const vCheck = sh('npm', ['view', 'safe-skills', 'version']);
+      if (vCheck.status === 0 && vCheck.stdout.trim()) {
+        latestVersion = vCheck.stdout.trim();
+      }
+    } catch {}
+
+    if (latestVersion) {
+      console.log(`Latest published version: v${latestVersion}`);
+      const cmp = compareSemver(latestVersion, VERSION);
+      if (cmp > 0) {
+        console.log(`Update available: v${VERSION} -> v${latestVersion}`);
+      } else if (cmp < 0) {
+        console.log(`Installed version (v${VERSION}) is ahead of latest published release (v${latestVersion}).`);
+      } else {
+        console.log('safe-skills is already on the latest version.');
+      }
+    }
+
+    if (opts.check) {
+      // Check only
+    } else if (opts.dryRun) {
+      console.log('\n[dry-run] Would execute: bun add -g safe-skills@latest');
+    } else {
+      console.log('\nUpdating safe-skills via bun (bun add -g safe-skills@latest)...');
+      try {
+        const bunUp = sh('bun', ['add', '-g', 'safe-skills@latest'], { stdio: 'inherit' });
+        if (bunUp.status === 0) {
+          console.log('safe-skills updated successfully to latest bun release.');
+        } else {
+          console.log(`bun update failed with exit code ${bunUp.status}`);
+        }
+      } catch (e) {
+        console.log(`bun update failed: ${e.message}`);
+      }
+    }
+  } else if (method === 'github') {
+    const scriptDir = path.resolve(__dirname);
+    let gitDir = null;
+
+    if (fs.existsSync(path.join(DATA_DIR, '.git'))) {
+      gitDir = DATA_DIR;
+    } else if ((opts.github || opts.git) && fs.existsSync(path.join(scriptDir, '.git'))) {
+      gitDir = scriptDir;
+    }
+
+    if (!gitDir) {
+      if (opts.check) {
+        console.log(`\nNo git clone found in ${DATA_DIR}.`);
+      } else if (opts.dryRun) {
+        console.log(`\n[dry-run] Would clone https://github.com/harshsinghmp/safe-skills.git into ${DATA_DIR}`);
+      } else {
+        console.log(`\nCloning latest safe-skills from GitHub into ${DATA_DIR}...`);
+        try {
+          fs.mkdirSync(DATA_DIR, { recursive: true });
+          const clone = sh('git', ['clone', 'https://github.com/harshsinghmp/safe-skills.git', DATA_DIR], { stdio: 'inherit' });
+          if (clone.status === 0) {
+            console.log('safe-skills cloned successfully from GitHub.');
+          } else {
+            console.log(`git clone failed with exit code ${clone.status}`);
+          }
+        } catch (e) {
+          console.log(`git clone failed: ${e.message}`);
+        }
+      }
+    } else {
+      console.log(`\nUpdating safe-skills via git repository (${gitDir})...`);
+      if (opts.check) {
+        try {
+          sh('git', ['fetch', 'origin'], { cwd: gitDir });
+          const status = sh('git', ['status', '-uno'], { cwd: gitDir });
+          console.log(status.stdout.trim() || 'Git status checked.');
+        } catch (e) {
+          console.log(`git check failed: ${e.message}`);
+        }
+      } else if (opts.dryRun) {
+        console.log(`\n[dry-run] Would execute: git -C ${gitDir} pull --ff-only`);
+      } else {
+        try {
+          const pull = sh('git', ['pull', '--ff-only'], { cwd: gitDir });
+          if (pull.status === 0) {
+            console.log(pull.stdout.trim() || 'safe-skills is already up to date.');
+          } else {
+            console.log(`git update notice: ${pull.stderr.trim() || 'already up to date or local branch'}`);
+          }
+        } catch (e) {
+          console.log(`git update failed: ${e.message}`);
+        }
+      }
     }
   }
 
   // 2. Update NVIDIA SkillSpector scanner
-  console.log('\nChecking NVIDIA SkillSpector scanner...');
-  let scannerUpdated = false;
-  try {
-    const uvCheck = sh('which', ['uv']);
-    if (uvCheck.status === 0) {
-      console.log('Running: uv tool upgrade skillspector...');
-      const uvUp = sh('uv', ['tool', 'upgrade', 'skillspector']);
-      if (uvUp.status === 0) {
-        console.log(uvUp.stdout.trim() || 'SkillSpector updated.');
-        scannerUpdated = true;
-      }
-    }
-  } catch {}
-
-  if (!scannerUpdated) {
+  if (opts.check) {
+    console.log('\nChecking NVIDIA SkillSpector scanner status...');
+  } else if (opts.dryRun) {
+    console.log('\n[dry-run] Would upgrade NVIDIA SkillSpector scanner');
+  } else if (SCANNER !== 'skillspector' && process.env.SAFE_SKILLS_SCANNER) {
+    console.log(`\nCustom scanner configured (${SCANNER}) — skipping external SkillSpector upgrade.`);
+  } else {
+    console.log('\nChecking NVIDIA SkillSpector scanner...');
+    let scannerUpdated = false;
     try {
-      const pipCheck = sh('which', ['pip']);
-      if (pipCheck.status === 0) {
-        console.log('Running: pip install --upgrade skillspector...');
-        const pipUp = sh('pip', ['install', '--upgrade', 'skillspector']);
-        if (pipUp.status === 0) scannerUpdated = true;
+      const uvCheck = sh('which', ['uv']);
+      if (uvCheck.status === 0) {
+        console.log('Running: uv tool upgrade skillspector...');
+        const uvUp = sh('uv', ['tool', 'upgrade', 'skillspector']);
+        if (uvUp.status === 0) {
+          console.log(uvUp.stdout.trim() || 'SkillSpector updated.');
+          scannerUpdated = true;
+        }
       }
     } catch {}
+
+    if (!scannerUpdated) {
+      try {
+        const pipCheck = sh('which', ['pip']);
+        if (pipCheck.status === 0) {
+          console.log('Running: pip install --upgrade skillspector...');
+          const pipUp = sh('pip', ['install', '--upgrade', 'skillspector']);
+          if (pipUp.status === 0) scannerUpdated = true;
+        }
+      } catch {}
+    }
   }
 
   console.log('\nUpdate process complete.');
@@ -598,7 +774,23 @@ function main() {
   const args = process.argv.slice(2);
   if (args.includes('--version') || args.includes('-V')) { console.log(VERSION); return; }
   if (args[0] === 'update') {
-    runUpdate();
+    const opts = {
+      npm: false,
+      bun: false,
+      github: false,
+      check: false,
+      dryRun: false,
+    };
+    for (let i = 1; i < args.length; i++) {
+      const a = args[i];
+      if (a === '--npm') opts.npm = true;
+      else if (a === '--bun') opts.bun = true;
+      else if (a === '--github' || a === '--git') opts.github = true;
+      else if (a === '--check') opts.check = true;
+      else if (a === '--dry-run') opts.dryRun = true;
+      else die(`unknown update option: ${a}`, 2);
+    }
+    runUpdate(opts);
     return;
   }
   if (args[0] === 'verify') {
@@ -626,7 +818,7 @@ function main() {
       const r = spawnSync(icmd, [...iprefix, ...args], { stdio: 'inherit' });
       process.exit(r.status ?? 0);
     }
-    die('usage: safe-skills <add|update|verify> [args]\n       safe-skills add <source> [--skill name ...] [options]\n       safe-skills verify [--global] [--strict] [--path dir]\n       safe-skills update', 2);
+    die('usage: safe-skills <add|update|verify> [args]\n       safe-skills add <source> [--skill name ...] [options]\n       safe-skills verify [--global] [--strict] [--path dir]\n       safe-skills update [--npm|--bun|--github|--check|--dry-run]', 2);
   }
 
   const reserved = new Set(['--threshold', '--force', '--llm', '--no-llm', '--skill', '--dry-run', '--seed', '--temperature', '--anti-toctou', '--readonly']);

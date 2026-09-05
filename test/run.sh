@@ -10,6 +10,7 @@ export SAFE_INSTALL_LOG="$(pwd)/test/.install.log"
 export SAFE_SKILLS_CONFIG="$(pwd)/test/.config"
 export SAFE_SKILLS_DATA="$(pwd)/test/.data"
 export SAFE_SKILLS_LOCAL_LOCKFILE="$(pwd)/test/.data/local-skills-lock.json"
+export SAFE_SKILLS_UPDATE_CMD="echo safe-skills-update-mock"
 rm -rf test/.config test/.data test/.install.log
 mkdir -p test/.config test/.data
 cat > test/.config/allowlist.toml <<'EOF'
@@ -172,7 +173,27 @@ rm -rf "$LOCKFILE_SKILL"
 # 21. update subcommand executes cleanly
 node safe-skills.js update </dev/null >/tmp/ss21.log 2>&1
 check "update subcommand: exit 0" 0 $?
-grep -q "SYSTEM UPDATE" /tmp/ss21.log && echo "PASS: update subcommand executed" || { echo "FAIL: update banner"; FAIL=$((FAIL+1)); }
+grep -q "SYSTEM UPDATE" /tmp/ss21.log && grep -q "safe-skills-update-mock" /tmp/ss21.log && echo "PASS: update subcommand executed with mock" || { echo "FAIL: update banner or mock"; FAIL=$((FAIL+1)); }
+
+# 21b. update --npm --dry-run
+SAFE_SKILLS_UPDATE_CMD="" node safe-skills.js update --npm --dry-run </dev/null >/tmp/ss21b.log 2>&1
+check "update --npm --dry-run: exit 0" 0 $?
+grep -q "Update method:     NPM" /tmp/ss21b.log && grep -q "npm install -g safe-skills@latest" /tmp/ss21b.log && echo "PASS: update --npm selects npm correctly" || { echo "FAIL: update --npm flag"; FAIL=$((FAIL+1)); }
+
+# 21c. update --bun --dry-run
+SAFE_SKILLS_UPDATE_CMD="" node safe-skills.js update --bun --dry-run </dev/null >/tmp/ss21c.log 2>&1
+check "update --bun --dry-run: exit 0" 0 $?
+grep -q "Update method:     BUN" /tmp/ss21c.log && grep -q "bun add -g safe-skills@latest" /tmp/ss21c.log && echo "PASS: update --bun selects bun correctly" || { echo "FAIL: update --bun flag"; FAIL=$((FAIL+1)); }
+
+# 21d. update --github --dry-run
+SAFE_SKILLS_UPDATE_CMD="" node safe-skills.js update --github --dry-run </dev/null >/tmp/ss21d.log 2>&1
+check "update --github --dry-run: exit 0" 0 $?
+grep -q "Update method:     GITHUB" /tmp/ss21d.log && grep -q "git -C" /tmp/ss21d.log && echo "PASS: update --github selects github correctly" || { echo "FAIL: update --github flag"; FAIL=$((FAIL+1)); }
+
+# 21e. update --check
+SAFE_SKILLS_UPDATE_CMD="" node safe-skills.js update --check </dev/null >/tmp/ss21e.log 2>&1
+check "update --check: exit 0" 0 $?
+grep -q "SYSTEM UPDATE" /tmp/ss21e.log && ! grep -q "npm install -g" /tmp/ss21e.log && echo "PASS: update --check does not execute install" || { echo "FAIL: update --check executed install"; FAIL=$((FAIL+1)); }
 
 # 22. invalid subcommand exits with code 2
 node safe-skills.js invalid-cmd </dev/null >/tmp/ss22.log 2>&1
