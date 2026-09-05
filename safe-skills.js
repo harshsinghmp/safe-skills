@@ -831,7 +831,7 @@ function main() {
   let force = false;
   let dryRun = false;
   let readonly = false;
-  let antiToctou = process.env.SAFE_SKILLS_ANTI_TOCTOU || 'commit'; // 'commit' | 'local' | 'off'
+  let antiToctou = process.env.SAFE_SKILLS_ANTI_TOCTOU || 'off'; // 'commit' | 'local' | 'off'
   let forceLLM = null; // true=llm, false=no-llm, null=auto
   const skillNames = [];
   const passthrough = [];
