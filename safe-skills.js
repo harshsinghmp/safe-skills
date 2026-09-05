@@ -22,7 +22,7 @@ if (process.env.SAFE_SKILLS_PASSTHROUGH === '1') {
   process.exit(r.status ?? 0);
 }
 
-const VERSION = '1.3.4';
+const VERSION = '1.3.5';
 
 const CONFIG_DIR = process.env.SAFE_SKILLS_CONFIG || path.join(os.homedir(), '.config', 'safe-skills');
 const DATA_DIR = process.env.SAFE_SKILLS_DATA || path.join(os.homedir(), '.local', 'share', 'safe-skills');
@@ -985,9 +985,8 @@ function main() {
       installTarget = root;
       console.log('safe-skills: Anti-TOCTOU active — installing from verified local sandbox');
     } else if (antiToctou === 'commit' && commit && !source.includes('#')) {
-      // Downstream `skills add` executes `git clone --depth 1 --branch <ref>`.
-      // Passing a commit SHA to git clone --branch causes fatal: Remote branch <sha> not found.
-      console.log(`safe-skills: Anti-TOCTOU notice — commit pinning (${commit.slice(0, 12)}) omitted to prevent downstream git clone failure`);
+      installTarget = `${source}#${commit}`;
+      console.log(`safe-skills: Anti-TOCTOU active — pinned downstream install to commit ${commit.slice(0, 12)}`);
     }
   }
 
