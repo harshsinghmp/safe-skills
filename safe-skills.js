@@ -22,7 +22,7 @@ if (process.env.SAFE_SKILLS_PASSTHROUGH === '1') {
   process.exit(r.status ?? 0);
 }
 
-const VERSION = '1.3.3';
+const VERSION = '1.3.4';
 
 const CONFIG_DIR = process.env.SAFE_SKILLS_CONFIG || path.join(os.homedir(), '.config', 'safe-skills');
 const DATA_DIR = process.env.SAFE_SKILLS_DATA || path.join(os.homedir(), '.local', 'share', 'safe-skills');
@@ -557,7 +557,8 @@ function detectUpdateMethod(opts = {}) {
   }
 
   // 2. Installed inside DATA_DIR with a git repo
-  if (scriptDir.startsWith(DATA_DIR) && fs.existsSync(path.join(DATA_DIR, '.git'))) {
+  const repoDir = path.join(DATA_DIR, 'repo');
+  if (scriptDir.startsWith(DATA_DIR) && (fs.existsSync(path.join(DATA_DIR, '.git')) || fs.existsSync(path.join(repoDir, '.git')))) {
     return 'github';
   }
 
@@ -675,24 +676,27 @@ function runUpdate(opts = {}) {
     }
   } else if (method === 'github') {
     const scriptDir = path.resolve(__dirname);
+    const defaultGitDir = path.join(DATA_DIR, 'repo');
     let gitDir = null;
 
     if (fs.existsSync(path.join(DATA_DIR, '.git'))) {
       gitDir = DATA_DIR;
+    } else if (fs.existsSync(path.join(defaultGitDir, '.git'))) {
+      gitDir = defaultGitDir;
     } else if ((opts.github || opts.git) && fs.existsSync(path.join(scriptDir, '.git'))) {
       gitDir = scriptDir;
     }
 
     if (!gitDir) {
       if (opts.check) {
-        console.log(`\nNo git clone found in ${DATA_DIR}.`);
+        console.log(`\nNo git clone found in ${defaultGitDir}.`);
       } else if (opts.dryRun) {
-        console.log(`\n[dry-run] Would clone https://github.com/harshsinghmp/safe-skills.git into ${DATA_DIR}`);
+        console.log(`\n[dry-run] Would clone https://github.com/harshsinghmp/safe-skills.git into ${defaultGitDir}`);
       } else {
-        console.log(`\nCloning latest safe-skills from GitHub into ${DATA_DIR}...`);
+        console.log(`\nCloning latest safe-skills from GitHub into ${defaultGitDir}...`);
         try {
-          fs.mkdirSync(DATA_DIR, { recursive: true });
-          const clone = sh('git', ['clone', 'https://github.com/harshsinghmp/safe-skills.git', DATA_DIR], { stdio: 'inherit' });
+          fs.mkdirSync(defaultGitDir, { recursive: true });
+          const clone = sh('git', ['clone', 'https://github.com/harshsinghmp/safe-skills.git', defaultGitDir], { stdio: 'inherit' });
           if (clone.status === 0) {
             console.log('safe-skills cloned successfully from GitHub.');
           } else {
