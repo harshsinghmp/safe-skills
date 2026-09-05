@@ -244,6 +244,17 @@ SAFE_TEST_CASE=low node safe-skills.js add "$LOCAL" --readonly </dev/null >/tmp/
 check "readonly hardening: exit 0" 0 $?
 grep -q "Decision:  SAFE" /tmp/ss28.log && echo "PASS: readonly install completed" || { echo "FAIL: readonly install"; FAIL=$((FAIL+1)); }
 
+# 29. Subcommand delegation when called as skills binary
+SAFE_SKILLS_UPSTREAM="node $(pwd)/test/fake-installer.js" node bin/skills.js list </dev/null >/tmp/ss29.log 2>&1
+check "subcommand delegation via skills binary: exit 0" 0 $?
+grep -q '"list"' test/.install.log && echo "PASS: delegated list subcommand upstream" || { echo "FAIL: delegation missing"; FAIL=$((FAIL+1)); }
+
+# 30. Recursion guard (SAFE_SKILLS_PASSTHROUGH=1) bypasses scan and delegates
+rm -f test/.install.log
+SAFE_SKILLS_UPSTREAM="node $(pwd)/test/fake-installer.js" SAFE_SKILLS_PASSTHROUGH=1 node safe-skills.js add "some/skill" </dev/null >/tmp/ss30.log 2>&1
+check "passthrough guard bypasses scan: exit 0" 0 $?
+grep -q '"add"' test/.install.log && grep -q '"some/skill"' test/.install.log && echo "PASS: passthrough bypassed scan cleanly" || { echo "FAIL: passthrough guard failed"; FAIL=$((FAIL+1)); }
+
 echo
 echo "=== $PASS passed, $FAIL failed ==="
 [ $FAIL -eq 0 ]
