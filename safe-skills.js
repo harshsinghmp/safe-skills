@@ -985,8 +985,9 @@ function main() {
       installTarget = root;
       console.log('safe-skills: Anti-TOCTOU active — installing from verified local sandbox');
     } else if (antiToctou === 'commit' && commit && !source.includes('#')) {
-      installTarget = `${source}#${commit}`;
-      console.log(`safe-skills: Anti-TOCTOU active — pinned downstream install to commit ${commit.slice(0, 12)}`);
+      // Downstream `skills add` executes `git clone --depth 1 --branch <ref>`.
+      // Passing a commit SHA to git clone --branch causes fatal: Remote branch <sha> not found.
+      console.log(`safe-skills: Anti-TOCTOU notice — commit pinning (${commit.slice(0, 12)}) omitted to prevent downstream git clone failure`);
     }
   }
 
