@@ -54,6 +54,14 @@ To establish `safe-skills` as the universal zero-trust security gate, integrity 
 * **Semantic Intent Drift Detection**:
   - LLM-powered divergence check between declared human documentation in `SKILL.md` and the actual tools/scripts packaged in the repository.
 
+### ⚡ CI/CD & Automated NPM Publishing Workflow
+* **Configure `NPM_TOKEN` Secret on GitHub**:
+  - Provision and configure `NPM_TOKEN` in GitHub repository secrets (`harshsinghmp/safe-skills`) so automated tag-driven releases (`v*`) successfully publish to the npm registry.
+* **Hardened Release Workflow (`.github/workflows/release.yml`)**:
+  - Ensure automated tag-push events execute test gating, public npm release publishing, and GitHub release creation with auto-generated release notes in one linear pipeline.
+* **OIDC & Provenance (Trusted Publishing)**:
+  - Migrate from static access tokens to npm Provenance via GitHub Actions OIDC (`id-token: write`) for cryptographic supply-chain build attestation.
+
 ### 🏰 v2.0.0 — Runtime Capability Sandboxing & OS Jail
 * **Capability Manifests (`CAPABILITIES.toml`)**:
   - Declare and enforce least-privilege permissions for each skill:
